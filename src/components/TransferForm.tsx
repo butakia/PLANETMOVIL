@@ -30,7 +30,7 @@ export default function TransferForm({ user }: { user: { store_id: number | null
   }
   return (
     <div className="mx-auto max-w-2xl space-y-4">
-      <div><h1 className="text-2xl font-extrabold tracking-tight">Trasladar equipo</h1><p className="text-sm text-slate-500">Mueve un equipo de una tienda a la otra. Queda registrado y se avisa al administrador.</p></div>
+      <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Trasladar equipo</h1><p className="text-sm text-slate-500">Mueve un equipo de una tienda a la otra. Queda registrado y se avisa al administrador.</p></div>
       <div className="card flex gap-2 p-4">
         <div className="relative flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input className="input pl-9 font-mono" placeholder="Código o IMEI del equipo" value={code} onChange={(e) => setCode(e.target.value)} onKeyDown={(e) => e.key === "Enter" && search()} autoFocus /></div>

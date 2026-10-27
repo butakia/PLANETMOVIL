@@ -3,10 +3,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertTriangle, Camera, Check, CheckCircle2, Loader2, Plus, Save, ScanLine, Smartphone, Headphones, X } from "lucide-react";
 import { api, type CatalogModel } from "@/lib/client";
 import { ACCESSORY_TYPES } from "@/lib/catalog";
+import Link from "next/link";
 import { limaToday, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import BarcodeScanner from "./BarcodeScanner";
 
+const GENERAL = { id: 0, name: "Almacén general", short: "Sin asignar", color: "#475569" };
 const RAMS = [0, 1, 2, 3, 4, 6, 8, 12, 16];
 const STORAGES = [0, 8, 16, 32, 64, 128, 256, 512, 1024];
 
@@ -16,6 +18,9 @@ export default function StockForm() {
   const { cat, reload, brandColor } = useCatalog();
   const [kind, setKind] = useState<"celular" | "accesorio">("celular");
   const [store, setStore] = useState(1);
+  const [accType, setAccType] = useState("");
+  const [accBrand, setAccBrand] = useState("");
+  const [accDetail, setAccDetail] = useState("");
   const [date, setDate] = useState(limaToday());
   const [editDate, setEditDate] = useState(false);
   const [model, setModel] = useState("");
@@ -41,9 +46,13 @@ export default function StockForm() {
   const [imeiConflict, setImeiConflict] = useState<Conflict>(null);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
-  const [saved, setSaved] = useState<{ label: string; code: string; store: number }[]>([]);
+  const [saved, setSaved] = useState<{ label: string; code: string; store: number; id?: number; ident?: string }[]>([]);
   const scanRef = useRef<HTMLInputElement>(null);
   const modelRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (kind === "accesorio") setModel([accType, accBrand.trim(), accDetail.trim()].filter(Boolean).join(" "));
+  }, [kind, accType, accBrand, accDetail]);
 
   const imei1 = imeis[primary] ?? "";
   const imei2 = imeis.find((_, i) => i !== primary) ?? "";
@@ -100,13 +109,13 @@ export default function StockForm() {
     if (kind === "celular" && !imei1) return setErr("Escanea o escribe el IMEI del equipo");
     setBusy(true);
     try {
-      await api("/api/products", {
+      const saveRes = await api<{ id: number; ident?: string }>("/api/products", {
         body: {
-          kind, store_id: store, entry_date: date, model: model.trim(), brand: brand || inferBrand(model) || null, imei1, imei2, ident, qty,
+          kind, store_id: store, entry_date: date, model: model.trim(), brand: kind === "accesorio" ? accBrand.trim() || null : brand || inferBrand(model) || null, imei1, imei2, ident, qty,
           ram, storage, color, condition: kind === "celular" ? condition : null, code, price_suggested: price, cost, supplier,
         },
       });
-      setSaved((s) => [{ label: `${model.trim()}${kind === "celular" ? ` · ${ram ? ram + "GB/" : ""}${storageLabel(storage)}` : ""}`, code, store }, ...s].slice(0, 8));
+      setSaved((s) => [{ label: `${model.trim()}${kind === "celular" ? ` · ${ram ? ram + "GB/" : ""}${storageLabel(storage)}` : ""}`, code, store, id: saveRes.id, ident: kind === "accesorio" ? saveRes.ident : undefined }, ...s].slice(0, 8));
       setImeis([]); setPrimary(0); setIdent(""); setCode(""); setScanMsg("");
       if (!another) { setModel(""); setBrand(""); setPrice(""); setCost(""); setSupplier(""); setColor(""); setQty(1); }
       setTimeout(() => (another && kind === "celular" ? scanRef : modelRef).current?.focus(), 50);
@@ -118,7 +127,7 @@ export default function StockForm() {
   }
 
   if (!cat) return <div className="p-10 text-center text-slate-400"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div>;
-  const storeObj = cat.stores.find((s) => s.id === store)!;
+  const storeObj = store === 0 ? GENERAL : cat.stores.find((s) => s.id === store)!;
 
   return (
     <div className="grid gap-5 xl:grid-cols-[1fr_20rem]">
@@ -127,14 +136,14 @@ export default function StockForm() {
         <div className="card space-y-4 p-4 sm:p-5">
           <div className="grid grid-cols-2 gap-3">
             {([["celular", "Celulares", Smartphone], ["accesorio", "Accesorios", Headphones]] as const).map(([k, l, I]) => (
-              <button key={k} onClick={() => { setKind(k); setErr(""); }} className={`flex items-center justify-center gap-2 rounded-2xl border-2 py-4 text-base font-bold transition ${kind === k ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
+              <button key={k} onClick={() => { setKind(k); setErr(""); setModel(""); setBrand(""); }} className={`flex items-center justify-center gap-2 rounded-2xl border-2 py-4 text-base font-bold transition ${kind === k ? "border-brand-500 bg-brand-50 text-brand-700" : "border-slate-200 text-slate-500 hover:border-slate-300"}`}>
                 <I className="h-5 w-5" /> {l}
               </button>
             ))}
           </div>
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <div className="grid grid-cols-2 gap-2">
-              {cat.stores.map((s) => (
+            <div className="grid grid-cols-3 gap-2">
+              {[...cat.stores, GENERAL].map((s) => (
                 <button key={s.id} onClick={() => setStore(s.id)} style={store === s.id ? { borderColor: s.color, background: s.color + "14", color: s.color } : undefined}
                   className="rounded-xl border-2 border-slate-200 px-3 py-2.5 text-left text-sm font-bold text-slate-500">
                   <span className="block text-[10px] font-semibold uppercase opacity-70">{s.short}</span>{s.name}
@@ -160,8 +169,15 @@ export default function StockForm() {
                 brand={brand || inferBrand(model)} onBrand={setBrand} brands={cat.brands.map((b) => b.name)} />
             ) : (
               <>
-                <input ref={modelRef} className="input" list="acc-types" placeholder="Ej. Cargador 20W, Audífonos, Mica..." value={model} onChange={(e) => setModel(e.target.value)} />
-                <datalist id="acc-types">{ACCESSORY_TYPES.map((t) => <option key={t} value={t} />)}</datalist>
+                <div className="space-y-3">
+                <div className="flex flex-wrap gap-2">{ACCESSORY_TYPES.map((t) => <button key={t} type="button" onClick={() => setAccType(accType === t ? "" : t)} className={`chip ${accType === t ? "chip-on" : ""}`}>{t}</button>)}</div>
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <input ref={modelRef} className="input" list="brand-list" placeholder="Marca (ej. Samsung) — opcional" value={accBrand} onChange={(e) => setAccBrand(e.target.value)} />
+                  <input className="input" placeholder="Detalle (ej. 20W, color negro) — opcional" value={accDetail} onChange={(e) => setAccDetail(e.target.value)} />
+                </div>
+                <datalist id="brand-list">{cat.brands.map((b) => <option key={b.name} value={b.name} />)}</datalist>
+                <p className="text-xs text-slate-500">Se guardará como: <b className="text-slate-800">{model || "—"}</b></p>
+              </div>
               </>
             )}
           </div>
@@ -204,7 +220,7 @@ export default function StockForm() {
           ) : (
             <div className="grid gap-3 sm:grid-cols-[1fr_8rem]">
               <div>
-                <label className="label">Código de identificación (escanea o escribe)</label>
+                <label className="label">Código de barras del producto (opcional: si no tiene, se crea uno con su QR)</label>
                 <input className="input font-mono" value={ident} onChange={(e) => setIdent(e.target.value)} placeholder="Código de barras / QR" />
               </div>
               <div>
@@ -284,6 +300,7 @@ export default function StockForm() {
                   <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
                   <span className="min-w-0 flex-1 truncate font-medium" style={{ color: brandColor(s.label.split(" ")[0]) }}>{s.label}</span>
                   {s.code && <span className="rounded bg-slate-100 px-1.5 font-mono text-xs">{s.code}</span>}
+                  {s.ident && <Link href={"/etiquetas?id=" + s.id} className="shrink-0 rounded-lg bg-blue-50 px-2 py-0.5 text-xs font-bold text-blue-800">Imprimir QR</Link>}
                 </li>
               ))}
             </ul>

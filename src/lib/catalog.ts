@@ -39,6 +39,7 @@ Samsung|A06|4|64|c
 Samsung|A15|4|128|c
 Samsung|A15 5G|6|128|c
 Samsung|A16|4|128|c
+Samsung|A17|4|128|c
 Samsung|A25 5G|8|256|c
 Samsung|A26 5G|8|256|c
 Samsung|A35 5G|8|256|c
@@ -154,6 +155,7 @@ export const CATALOG: CatalogItem[] = RAW.trim()
   });
 
 export const ACCESSORY_TYPES = [
-  "Cargador", "Cable USB", "Audífonos", "Parlante", "Case / Funda", "Mica / Vidrio templado",
-  "Power bank", "Memoria SD", "Soporte", "Smartwatch", "Cargador de auto", "Otro",
+  "Cargador USB", "Cargador tipo C", "Cargador de auto", "Cable USB", "Cable tipo C", "Cable iPhone",
+  "Audífonos con cable", "Audífonos inalámbricos", "Audífonos Bluetooth", "Parlante Bluetooth", "Power bank",
+  "Case / Funda", "Mica / Vidrio templado", "Memoria SD", "Soporte para celular", "Smartwatch", "Adaptador", "Otro",
 ];

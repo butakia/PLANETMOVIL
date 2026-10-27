@@ -63,7 +63,7 @@ export default function Reports({ role, home = false, defaultPreset = "hoy" }: {
     <div className="space-y-5">
       {!home && (
         <div className="flex flex-wrap items-end justify-between gap-3">
-          <div><h1 className="text-2xl font-extrabold tracking-tight">{seller_ ? "Mi resumen de ventas" : "Informes"}</h1>
+          <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">{seller_ ? "Mi resumen de ventas" : "Informes"}</h1>
             <p className="text-sm text-slate-500">Se generan solos con cada venta y cada ingreso de stock.</p></div>
           <div className="no-print flex gap-2"><button onClick={exportSales} className="btn-ghost"><Download className="h-4 w-4" /> Ventas CSV</button><button onClick={() => window.print()} className="btn-ghost"><Printer className="h-4 w-4" /> Imprimir</button></div>
         </div>
@@ -92,9 +92,9 @@ export default function Reports({ role, home = false, defaultPreset = "hoy" }: {
           )}
           <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">
             <Kpi label="Total vendido" value={soles(t?.revenue)} num={Number(t?.revenue)} accent />
-            <Kpi label="Ventas" value={String(t?.sales)} num={Number(t?.sales)} sub={`${t?.units} unidades`} />
-            {!seller_ ? <Kpi label="Utilidad estimada" value={t?.profit === null ? "—" : soles(t?.profit)} sub="según precios de compra" /> : <Kpi label="Ticket promedio" value={soles(Number(t?.sales) ? Number(t?.revenue) / Number(t?.sales) : 0)} />}
-            {!seller_ ? <Kpi label="Ventas con corrección" value={String(t?.modified ?? 0)} sub="datos modificados" warn={Number(t?.modified) > 0} /> : <Kpi label="Equipos vendidos" value={String(t?.units)} />}
+            <Kpi label="Ventas" tone="green" value={String(t?.sales)} num={Number(t?.sales)} sub={`${t?.units} unidades`} />
+            {!seller_ ? <Kpi tone="amber" label="Utilidad estimada" value={t?.profit === null ? "—" : soles(t?.profit)} sub="según precios de compra" /> : <Kpi label="Ticket promedio" value={soles(Number(t?.sales) ? Number(t?.revenue) / Number(t?.sales) : 0)} />}
+            {!seller_ ? <Kpi label="Ventas con corrección" value={String(t?.modified ?? 0)} sub="datos modificados" tone={Number(t?.modified) > 0 ? "rose" : undefined} /> : <Kpi label="Equipos vendidos" value={String(t?.units)} />}
           </div>
 
           {home ? (
@@ -145,7 +145,7 @@ export default function Reports({ role, home = false, defaultPreset = "hoy" }: {
 
           <div className="grid gap-4 lg:grid-cols-2">
             <Panel title="Stock actual por tienda">
-              <ul className="space-y-2">{r.stock.map((s) => (
+              <ul className="space-y-2">{r.stock.filter((x) => x.id !== 0 || Number(x.units) > 0).map((s) => (
                 <li key={s.id} className="flex items-center justify-between rounded-xl px-3 py-2.5" style={{ background: s.color + "14" }}>
                   <b style={{ color: s.color }}>{s.name}</b><span className="text-right text-sm"><b>{s.units} equipos</b><span className="block text-xs text-slate-500">Valorizado {soles(s.value_suggested)}{s.value_cost ? ` · Costo ${soles(s.value_cost)}` : ""}</span></span></li>))}</ul>
             </Panel>
@@ -194,18 +194,24 @@ function useCountUp(target: number | undefined) {
   return v;
 }
 
-function Kpi({ label, value, sub, accent, warn, num }: { label: string; value: string; sub?: string; accent?: boolean; warn?: boolean; num?: number }) {
+function Kpi({ label, value, sub, accent, warn, num, tone }: { label: string; value: string; sub?: string; accent?: boolean; warn?: boolean; num?: number; tone?: "green" | "amber" | "rose" }) {
   const anim = useCountUp(num);
   const shown = num === undefined ? value : value.startsWith("S/") ? soles(anim) : String(Math.round(anim));
+  const look = accent ? "bg-gradient-to-br from-blue-600 to-blue-900 text-white"
+    : tone === "green" ? "bg-gradient-to-br from-emerald-400 to-teal-600 text-white"
+    : tone === "amber" ? "bg-gradient-to-br from-amber-300 to-orange-500 text-white"
+    : warn || tone === "rose" ? "bg-gradient-to-br from-rose-400 to-pink-600 text-white"
+    : "card";
+  const light = look !== "card";
   return (
-    <div className={`lift rounded-2xl p-4 shadow-sm ${accent ? "bg-gradient-to-br from-blue-600 to-blue-700 text-white" : warn ? "border border-amber-300 bg-amber-50" : "card"}`}>
-      <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ${accent ? "text-blue-200" : "text-slate-500"}`}>{accent && <TrendingUp className="h-3.5 w-3.5" />}{label}</div>
+    <div className={`lift rounded-2xl p-4 shadow-sm ${look}`}>
+      <div className={`flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wide ${light ? "text-white/80" : "text-slate-500"}`}>{accent && <TrendingUp className="h-3.5 w-3.5" />}{label}</div>
       <div className="mt-1 text-2xl font-extrabold tracking-tight tabular-nums">{shown}</div>
-      {sub && <div className={`text-xs ${accent ? "text-blue-200" : "text-slate-400"}`}>{sub}</div>}
+      {sub && <div className={`text-xs ${light ? "text-white/75" : "text-slate-400"}`}>{sub}</div>}
     </div>
   );
 }
 function Panel({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
-  return <section className="card p-4"><div className="mb-3 flex items-center justify-between"><h3 className="text-sm font-extrabold">{title}</h3>{action}</div>{children}</section>;
+  return <section className="card p-4"><div className="mb-3 flex items-center justify-between"><h3 className="flex items-center gap-2 text-sm font-extrabold"><span className="h-2.5 w-2.5 rounded-full bg-gradient-to-br from-sky-400 to-blue-700" />{title}</h3>{action}</div>{children}</section>;
 }
 const Empty = () => <p className="py-6 text-center text-sm text-slate-400">Sin datos en este periodo.</p>;

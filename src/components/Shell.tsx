@@ -3,18 +3,19 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
-  ArrowLeftRight, BarChart3, Bell, BellRing, Home, LogOut, PackagePlus, Receipt, Settings, ShoppingBag, ShoppingCart, Users, Warehouse, Wallet,
+  ArrowLeftRight, BarChart3, Bell, BellRing, Home, LogOut, PackagePlus, QrCode, Receipt, Settings, ShoppingBag, ShoppingCart, Users, Warehouse, Wallet,
 } from "lucide-react";
 import Logo from "./Logo";
 import { api } from "@/lib/client";
 
-type U = { id: number; username: string; name: string; role: "admin" | "seller" | "gerencia"; store_id: number | null };
+type U = { id: number; username: string; name: string; role: "admin" | "seller" | "gerencia"; store_id: number | null; rotating?: boolean };
 
 const NAV: Record<U["role"], { href: string; label: string; icon: typeof Home }[]> = {
   admin: [
     { href: "/", label: "Inicio", icon: Home },
     { href: "/stock", label: "Stock", icon: Warehouse },
     { href: "/stock/nuevo", label: "Ingresar", icon: PackagePlus },
+    { href: "/etiquetas", label: "Etiquetas", icon: QrCode },
     { href: "/vender", label: "Vender", icon: ShoppingCart },
     { href: "/ventas", label: "Ventas", icon: Receipt },
     { href: "/informes", label: "Informes", icon: BarChart3 },
@@ -40,7 +41,9 @@ const NAV: Record<U["role"], { href: string; label: string; icon: typeof Home }[
 };
 const ROLE_LABEL = { admin: "Administrador", gerencia: "Gerencia · Consulta e informes", seller: "Vendedora" };
 
-export default function Shell({ user, children }: { user: U; children: React.ReactNode }) {
+type StoreLite = { id: number; name: string; color: string };
+
+export default function Shell({ user, stores = [], children }: { user: U; stores?: StoreLite[]; children: React.ReactNode }) {
   const path = usePathname();
   const router = useRouter();
   const items = NAV[user.role];
@@ -89,6 +92,7 @@ export default function Shell({ user, children }: { user: U; children: React.Rea
         <button onClick={logout} aria-label="Salir" className="rounded-lg p-2 hover:bg-white/10"><LogOut className="h-5 w-5" /></button>
       </header>
 
+      {user.rotating && stores.length > 0 && <StoreSwitch stores={stores} current={user.store_id ?? 1} />}
       <main key={path} className="anim-in mx-auto max-w-[1400px] px-4 pb-28 pt-5 lg:px-8 lg:pb-10 lg:pt-8">{children}</main>
       {watcher && <AlertWatcher />}
 
@@ -170,5 +174,27 @@ function AlertWatcher() {
         ))}
       </div>
     </>
+  );
+}
+
+/** La vendedora que rota entre tiendas indica dónde está trabajando hoy. */
+function StoreSwitch({ stores, current }: { stores: StoreLite[]; current: number }) {
+  const router = useRouter();
+  async function pick(id: number) {
+    if (id === current) return;
+    await api("/api/store", { body: { store_id: id } });
+    router.refresh();
+  }
+  return (
+    <div className="no-print sticky top-[60px] z-20 border-b border-slate-100 bg-white/90 px-4 py-2 backdrop-blur lg:top-0 lg:px-8">
+      <div className="mx-auto flex max-w-[1400px] items-center gap-3 text-sm">
+        <span className="hidden font-semibold text-slate-500 sm:inline">Hoy estoy en:</span>
+        <div className="flex flex-1 gap-1.5 rounded-xl bg-slate-100 p-1 sm:flex-none">
+          {stores.map((st) => (
+            <button key={st.id} onClick={() => pick(st.id)} className={`flex-1 rounded-lg px-3 py-1.5 text-xs font-bold transition sm:flex-none sm:text-sm ${current === st.id ? "text-white shadow" : "text-slate-500"}`} style={current === st.id ? { background: st.color } : undefined}>{st.name}</button>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }

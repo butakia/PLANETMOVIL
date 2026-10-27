@@ -65,7 +65,7 @@ function toRows(grid: unknown[][]): Row[] {
 export default function ImportModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
   const [rows, setRows] = useState<Row[]>([]);
   const [fileName, setFileName] = useState("");
-  const [store, setStore] = useState(1);
+  const [store, setStore] = useState(0);
   const [busy, setBusy] = useState(false);
   const [result, setResult] = useState<{ created: number; skipped: { row: number; model: string; reason: string }[] } | null>(null);
   const [err, setErr] = useState("");
@@ -107,7 +107,7 @@ export default function ImportModal({ onClose, onDone }: { onClose: () => void; 
         {rows.length > 0 && !result && (
           <>
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm"><b>{rows.length}</b> equipos detectados. Si la hoja no trae columna Tienda, van a:
-              <select className="input !w-auto !py-1.5" value={store} onChange={(e) => setStore(Number(e.target.value))}><option value={1}>Planet Movil (Tienda 1)</option><option value={2}>Soluciones Móviles (Tienda 2)</option></select></div>
+              <select className="input !w-auto !py-1.5" value={store} onChange={(e) => setStore(Number(e.target.value))}><option value={0}>Almacén general (asignar después)</option><option value={1}>Planet Movil (Tienda 1)</option><option value={2}>Soluciones Móviles (Tienda 2)</option></select></div>
             <div className="mt-3 max-h-60 overflow-auto rounded-xl border border-slate-200"><table className="w-full text-xs"><thead><tr>{["Modelo", "IMEI", "Cód.", "RAM", "Alm.", "Color", "Caja", "Precio", "Tienda"].map((h) => <th key={h} className="th">{h}</th>)}</tr></thead>
               <tbody>{rows.slice(0, 50).map((r, i) => <tr key={i}>{["model", "imei1", "code", "ram", "storage", "color", "condition", "price_suggested", "store"].map((k) => <td key={k} className="td">{String(r[k] ?? "")}</td>)}</tr>)}</tbody></table></div>
             <button disabled={busy} onClick={run} className="btn-primary mt-4 w-full py-3">{busy && <Loader2 className="h-4 w-4 animate-spin" />} Importar {rows.length} equipos</button>

@@ -17,7 +17,7 @@ export async function POST(req: NextRequest) {
   await run("UPDATE products SET store_id=? WHERE id=?", [to, p.id]);
   await run("INSERT INTO movements (product_id,from_store,to_store,user_name) VALUES (?,?,?,?)", [p.id, p.store_id, to, g.user.name]);
   await run("INSERT INTO alerts (type,message,store_id) VALUES ('traslado',?,?)", [
-    `${g.user.name} trasladó ${p.model}${p.code ? ` (cód. ${p.code})` : ""} de ${stores[p.store_id - 1]?.name} a ${stores[to - 1]?.name}`,
+    `${g.user.name} trasladó ${p.model}${p.code ? ` (cód. ${p.code})` : ""} de ${p.store_id === 0 ? "Almacén general" : stores[p.store_id - 1]?.name} a ${stores[to - 1]?.name}`,
     to,
   ]);
   return NextResponse.json({ ok: true });

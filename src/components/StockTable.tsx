@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, Loader2, Pencil, Plus, Search, Trash2, Upload, X } from "lucide-react";
+import { Download, Loader2, Pencil, Plus, QrCode, Search, Trash2, Upload, X } from "lucide-react";
 import { api, downloadCSV } from "@/lib/client";
 import { fmtDay, soles, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -10,7 +10,7 @@ import ImportModal from "./ImportModal";
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
   ident: string | null; code: string | null; ram: number | null; storage: number | null; color: string | null; condition: string | null; qty: number;
-  price_suggested: number | null; entry_date: string; status: string;
+  price_suggested: number | null; entry_date: string; status: string; is_test?: number;
 };
 
 export default function StockTable({ role }: { role: "admin" | "seller" | "gerencia" }) {
@@ -23,8 +23,14 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [kind, setKind] = useState("");
   const [status, setStatus] = useState("stock");
   const [group, setGroup] = useState(false);
+  const [adv, setAdv] = useState(false);
+  const [f, setF] = useState({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" });
+  const activeAdv = Object.values(f).filter(Boolean).length;
   const [edit, setEdit] = useState<P | null>(null);
   const [importing, setImporting] = useState(false);
+  const [sel, setSel] = useState<Set<number>>(new Set());
+  const [aqty, setAqty] = useState("");
+  const toggle = (id: number) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const load = useCallback(async () => {
     const sp = new URLSearchParams({ status });
@@ -32,10 +38,11 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     if (store) sp.set("store", store);
     if (brand) sp.set("brand", brand);
     if (kind) sp.set("kind", kind);
+    Object.entries(f).forEach(([k, v]) => v && sp.set(k, v));
     const r = await api<{ products: P[] }>(`/api/products?${sp}`);
     setRows(r.products);
     setLoading(false);
-  }, [q, store, brand, kind, status]);
+  }, [q, store, brand, kind, status, f]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -54,6 +61,15 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     return [...m.entries()];
   }, [rows, group]);
 
+  async function assign(to: number) {
+    const ids = [...sel];
+    if (!ids.length) return;
+    const one = ids.length === 1 ? rows.find((r) => r.id === ids[0]) : null;
+    await api("/api/products/assign", { body: { ids, store_id: to, qty: one && one.kind === "accesorio" && Number(aqty) > 0 ? Number(aqty) : undefined } });
+    setSel(new Set()); setAqty(""); load();
+  }
+  const oneSel = sel.size === 1 ? rows.find((r) => sel.has(r.id)) : null;
+
   function exportCsv() {
     downloadCSV(`stock-${new Date().toISOString().slice(0, 10)}.csv`, [
       ["Tienda", "Tipo", "Marca", "Modelo", "RAM", "Almacenamiento", "Color", "Estado caja", "Cód. interno", "IMEI 1", "IMEI 2", "Cód. identificación", "Cantidad", "Precio sugerido", "Fecha ingreso", "Situación"],
@@ -65,7 +81,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-extrabold tracking-tight">Stock</h1>
+          <h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Stock</h1>
           <p className="text-sm text-slate-500"><b className="text-slate-800">{totals.units}</b> unidades · valorizado a precio sugerido <b className="text-slate-800">{soles(totals.value)}</b></p>
         </div>
         <div className="flex gap-2">
@@ -76,7 +92,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto rounded-2xl bg-slate-200/70 p-1.5">
-        {[{ id: "", name: "Stock general", color: "#1e3a8a" }, ...(cat?.stores.map((x) => ({ id: String(x.id), name: x.name, color: x.color })) ?? [])].map((t) => (
+        {[{ id: "", name: "Todo el stock", color: "#1e3a8a" }, { id: "0", name: "Almacén general", color: "#475569" }, ...(cat?.stores.map((x) => ({ id: String(x.id), name: x.name, color: x.color })) ?? [])].map((t) => (
           <button key={t.id} onClick={() => setStore(t.id)} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition ${store === t.id ? "bg-white shadow" : "text-slate-500 hover:text-slate-800"}`} style={store === t.id ? { color: t.color } : undefined}>{t.name}</button>
         ))}
       </div>
@@ -97,29 +113,55 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <option value="stock">En stock</option><option value="sold">Vendidos</option><option value="all">Todos</option>
         </select>
         <label className="flex items-center gap-2 px-2 text-sm font-medium text-slate-600"><input type="checkbox" className="accent-blue-600" checked={group} onChange={(e) => setGroup(e.target.checked)} /> Agrupar por marca</label>
+        <button onClick={() => setAdv(!adv)} className={`chip !py-1.5 text-xs ${adv || activeAdv ? "chip-on" : ""}`}>Más filtros{activeAdv ? ` (${activeAdv})` : ""}</button>
+        {adv && (
+          <div className="anim-pop grid w-full gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div><label className="label">Color</label><select className="input" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })}><option value="">Todos</option>{cat?.colors.map((c) => <option key={c.name}>{c.name}</option>)}</select></div>
+            <div><label className="label">RAM</label><select className="input" value={f.ram} onChange={(e) => setF({ ...f, ram: e.target.value })}><option value="">Todas</option>{[1, 2, 3, 4, 6, 8, 12, 16].map((n) => <option key={n} value={n}>{n} GB</option>)}</select></div>
+            <div><label className="label">Almacenamiento</label><select className="input" value={f.storage} onChange={(e) => setF({ ...f, storage: e.target.value })}><option value="">Todos</option>{[8, 16, 32, 64, 128, 256, 512, 1024].map((n) => <option key={n} value={n}>{storageLabel(n)}</option>)}</select></div>
+            <div><label className="label">Caja</label><select className="input" value={f.condition} onChange={(e) => setF({ ...f, condition: e.target.value })}><option value="">Todas</option><option value="Sellado">Sellada</option><option value="Abierto">Abierta</option></select></div>
+            <div><label className="label">Ingresó desde</label><input type="date" className="input" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></div>
+            <div><label className="label">Ingresó hasta</label><input type="date" className="input" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></div>
+            <div><label className="label">Precio desde (S/)</label><input type="number" className="input" value={f.pmin} onChange={(e) => setF({ ...f, pmin: e.target.value })} /></div>
+            <div><label className="label">Precio hasta (S/)</label><input type="number" className="input" value={f.pmax} onChange={(e) => setF({ ...f, pmax: e.target.value })} /></div>
+            <label className="flex items-center gap-2 text-sm font-medium text-slate-600"><input type="checkbox" className="accent-blue-700" checked={!!f.noprice} onChange={(e) => setF({ ...f, noprice: e.target.checked ? "1" : "" })} /> Solo sin precio sugerido</label>
+            {activeAdv > 0 && <button className="btn-ghost !py-1.5 text-xs sm:col-start-4" onClick={() => setF({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" })}>Limpiar filtros</button>}
+          </div>
+        )}
       </div>
 
+      {role === "admin" && sel.size > 0 && (
+        <div className="anim-pop sticky top-2 z-20 flex flex-wrap items-center gap-3 rounded-2xl bg-blue-900 p-3 text-sm font-semibold text-white shadow-xl">
+          <span>{sel.size} seleccionado{sel.size > 1 ? "s" : ""}</span>
+          {oneSel && oneSel.kind === "accesorio" && oneSel.qty > 1 && <input type="number" min={1} max={oneSel.qty - 1} placeholder={"cuántas de " + oneSel.qty} className="w-32 rounded-lg px-2 py-1 text-slate-900" value={aqty} onChange={(e) => setAqty(e.target.value)} />}
+          <span className="opacity-70">Asignar a:</span>
+          {cat?.stores.map((x) => <button key={x.id} onClick={() => assign(x.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold" style={{ background: x.color }}>{x.name}</button>)}
+          <button onClick={() => assign(0)} className="rounded-lg bg-slate-500 px-3 py-1.5 text-xs font-bold">Almacén general</button>
+          <button onClick={() => setSel(new Set())} className="ml-auto rounded-lg bg-white/15 px-3 py-1.5 text-xs">Cancelar</button>
+        </div>
+      )}
       <div className="card overflow-hidden">
         <div className="max-h-[68dvh] overflow-auto">
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                {["Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación"] : []), ""].map((h, i) => <th key={i} className="th">{h}</th>)}
+                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación"] : []), ""].map((h, i) => <th key={i} className="th">{h}</th>)}
               </tr>
             </thead>
             <tbody>
-              {loading && <tr><td className="td py-10 text-center text-slate-400" colSpan={14}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
-              {!loading && rows.length === 0 && <tr><td className="td py-10 text-center text-slate-400" colSpan={14}>No hay equipos con esos filtros.</td></tr>}
+              {loading && <tr><td className="td py-10 text-center text-slate-400" colSpan={16}><Loader2 className="mx-auto h-5 w-5 animate-spin" /></td></tr>}
+              {!loading && rows.length === 0 && <tr><td className="td py-10 text-center text-slate-400" colSpan={16}>No hay equipos con esos filtros.</td></tr>}
               {grouped.map(([g, list]) => (
                 <GroupRows key={g} title={g} color={brandColor(g)} count={list.length} show={group}>
                   {list.map((r) => {
                     const bc = brandColor(r.brand);
                     return (
                       <tr key={r.id} className="hover:brightness-95" style={{ background: bc + "12" }}>
-                        <td className="td font-mono font-bold" style={{ borderLeft: `5px solid ${bc}` }}>{r.code ?? "—"}</td>
-                        <td className="td"><span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: cat?.stores.find((s) => s.id === r.store_id)?.color }}>{r.store_name}</span></td>
+                        {role === "admin" && <td className="td" style={{ borderLeft: `5px solid ${bc}` }}><input type="checkbox" className="h-4 w-4 accent-blue-700" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>}
+                        <td className="td font-mono font-bold" style={role === "admin" ? undefined : { borderLeft: `5px solid ${bc}` }}>{r.code ?? "—"}</td>
+                        <td className="td"><span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: cat?.stores.find((s) => s.id === r.store_id)?.color ?? "#64748b" }}>{r.store_name}</span></td>
                         <td className="td font-bold" style={{ color: bc }}>{r.brand ?? "—"}</td>
-                        <td className="td font-semibold">{r.model}{r.kind === "accesorio" && r.qty > 1 ? <span className="ml-1 text-xs text-slate-500">×{r.qty}</span> : null}</td>
+                        <td className="td font-semibold">{r.model}{r.is_test ? <span className="ml-1.5 rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-700">PRUEBA</span> : null}{r.kind === "accesorio" && r.qty > 1 ? <span className="ml-1 text-xs text-slate-500">×{r.qty}</span> : null}</td>
                         <td className="td">{r.ram ? `${r.ram}GB` : "—"}</td>
                         <td className="td">{r.storage ? storageLabel(r.storage) : "—"}</td>
                         <td className="td">{r.color ? <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border border-slate-300" style={{ background: colorHex(r.color) }} />{r.color}</span> : "—"}</td>
@@ -129,7 +171,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td font-semibold">{soles(r.price_suggested)}</td>
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>
                         {status !== "stock" && <td className="td">{r.status === "stock" ? "En stock" : "Vendido"}</td>}
-                        <td className="td">{role === "admin" && <button onClick={() => setEdit(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><Pencil className="h-4 w-4" /></button>}</td>
+                        <td className="td">{role === "admin" && r.kind === "accesorio" && <Link href={"/etiquetas?id=" + r.id} title="Etiqueta QR / código de barras" className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><QrCode className="h-4 w-4" /></Link>}{role === "admin" && <button onClick={() => setEdit(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><Pencil className="h-4 w-4" /></button>}</td>
                       </tr>
                     );
                   })}
@@ -140,7 +182,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         </div>
       </div>
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={load} />}
-      {edit && cat && <EditModal p={edit} stores={cat.stores} onClose={() => setEdit(null)} onDone={() => { setEdit(null); load(); }} />}
+      {edit && cat && <EditModal p={edit} stores={[{ id: 0, name: "Almacén general" }, ...cat.stores]} onClose={() => setEdit(null)} onDone={() => { setEdit(null); load(); }} />}
     </div>
   );
 }
@@ -148,7 +190,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
 function GroupRows({ title, color, count, show, children }: { title: string; color: string; count: number; show: boolean; children: React.ReactNode }) {
   return (
     <>
-      {show && <tr><td colSpan={14} className="border-b border-slate-200 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white" style={{ background: color }}>{title} · {count}</td></tr>}
+      {show && <tr><td colSpan={16} className="border-b border-slate-200 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white" style={{ background: color }}>{title} · {count}</td></tr>}
       {children}
     </>
   );

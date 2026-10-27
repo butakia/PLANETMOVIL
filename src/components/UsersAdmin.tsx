@@ -21,7 +21,7 @@ export default function UsersAdmin() {
   }
   return (
     <div className="mx-auto max-w-4xl space-y-5">
-      <div><h1 className="text-2xl font-extrabold tracking-tight">Usuarios</h1><p className="text-sm text-slate-500">Las vendedoras entran solo con su nombre de usuario (sin contraseña). Gerencia también puede entrar solo con su usuario; el administrador usa contraseña.</p></div>
+      <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Usuarios</h1><p className="text-sm text-slate-500">Las vendedoras entran solo con su nombre de usuario (sin contraseña). Gerencia también puede entrar solo con su usuario; el administrador usa contraseña.</p></div>
       <form onSubmit={add} className="card grid gap-3 p-4 sm:grid-cols-2 lg:grid-cols-6">
         <input className="input lg:col-span-1" placeholder="Nombre" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
         <input className="input lg:col-span-1" placeholder="Usuario (ej. Milagros)" autoCapitalize="none" value={f.username} onChange={(e) => setF({ ...f, username: e.target.value })} />

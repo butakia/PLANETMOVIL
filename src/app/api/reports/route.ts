@@ -33,7 +33,8 @@ export async function GET(req: NextRequest) {
     all(`SELECT s.day, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s WHERE ${W} GROUP BY s.day ORDER BY s.day`, args),
     all(`SELECT p.method, SUM(p.amount) AS amount, COUNT(*) AS n FROM payments p JOIN sales s ON s.id=p.sale_id WHERE ${W} GROUP BY p.method ORDER BY amount DESC`, args),
     all(`SELECT st.id, st.name, st.color, COALESCE(SUM(p.qty),0) AS units, COALESCE(SUM(p.price_suggested*p.qty),0) AS value_suggested,
-         ${seller ? "NULL" : "SUM(p.cost*p.qty)"} AS value_cost FROM stores st LEFT JOIN products p ON p.store_id=st.id AND p.status='stock' GROUP BY st.id`),
+         ${seller ? "NULL" : "SUM(p.cost*p.qty)"} AS value_cost FROM stores st LEFT JOIN products p ON p.store_id=st.id AND p.status='stock' GROUP BY st.id
+         UNION ALL SELECT 0, 'Almacén general', '#64748b', COALESCE(SUM(qty),0), COALESCE(SUM(price_suggested*qty),0), ${seller ? "NULL" : "SUM(cost*qty)"} FROM products WHERE store_id=0 AND status='stock'`),
     all(`SELECT COALESCE(p.brand,'Otros') AS brand, SUM(p.qty) AS units, COALESCE(SUM(p.price_suggested*p.qty),0) AS value_suggested
          FROM products p WHERE p.status='stock' GROUP BY brand ORDER BY units DESC`),
   ]);

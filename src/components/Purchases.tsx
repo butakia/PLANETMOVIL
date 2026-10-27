@@ -35,7 +35,7 @@ export default function Purchases() {
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-extrabold tracking-tight">Compras y costos</h1>
+        <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Compras y costos</h1>
           <p className="text-sm text-slate-500">Stock actual a costo <b className="text-slate-800">{soles(costTotal)}</b> · a precio sugerido <b className="text-slate-800">{soles(saleTotal)}</b> · margen potencial <b className="text-emerald-600">{soles(saleTotal - costTotal)}</b></p></div>
         <button className="btn-ghost" onClick={() => downloadCSV("compras.csv", [["Ingreso", "Tienda", "Marca", "Modelo", "Cód.", "Cantidad", "Proveedor", "P. compra", "P. sugerido", "Situación"], ...shown.map((r) => [fmtDay(r.entry_date), r.store_name, r.brand, r.model, r.code, r.qty, r.supplier, r.cost, r.price_suggested, r.status === "stock" ? "En stock" : "Vendido"])])}><Download className="h-4 w-4" /> Descargar CSV</button>
       </div>

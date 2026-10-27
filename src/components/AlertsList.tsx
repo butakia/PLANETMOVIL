@@ -19,7 +19,7 @@ export default function AlertsList() {
   return (
     <div className="mx-auto max-w-3xl space-y-4">
       <div className="flex items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-extrabold tracking-tight">Alertas</h1><p className="text-sm text-slate-500">{unread} sin leer · ventas, correcciones y traslados</p></div>
+        <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Alertas</h1><p className="text-sm text-slate-500">{unread} sin leer · ventas, correcciones y traslados</p></div>
         <button className="btn-ghost" onClick={async () => { await api("/api/alerts", { method: "POST", body: {} }); load(); }}><CheckCheck className="h-4 w-4" /> Marcar todo como leído</button>
       </div>
       {alerts.length === 0 && <p className="card p-10 text-center text-slate-400">Aún no hay alertas.</p>}

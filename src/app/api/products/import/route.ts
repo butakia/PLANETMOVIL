@@ -18,7 +18,7 @@ export async function POST(req: NextRequest) {
     const fail = (reason: string) => skipped.push({ row: i + 2, model: model ?? "—", reason });
     if (!model) { fail("sin modelo"); continue; }
     const st = norm(r.store);
-    const store = st.includes("solu") || st === "2" ? 2 : st.includes("planet") || st === "1" ? 1 : Number(store_id) === 2 ? 2 : 1;
+    const store = st.includes("gener") || st.includes("almac") || st === "0" ? 0 : st.includes("solu") || st === "2" ? 2 : st.includes("planet") || st === "1" ? 1 : [0, 1, 2].includes(Number(store_id)) ? Number(store_id) : 0;
     const kind = norm(r.kind).startsWith("acc") ? "accesorio" : "celular";
     const code = clean(r.code);
     const imei1 = kind === "celular" ? clean(r.imei1)?.replace(/\s/g, "") ?? null : null;

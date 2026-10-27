@@ -1,4 +1,5 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest, NextResponse, after } from "next/server";
+import { sendWhatsApp } from "@/lib/notify";
 import { all, db } from "@/lib/db";
 import { guard, limaDay } from "@/lib/auth";
 import { clean, num, type Product } from "@/lib/products";
@@ -71,6 +72,7 @@ export async function POST(req: NextRequest) {
       const pr = await tx.execute({ sql: "SELECT * FROM products WHERE id=?", args: [Number(b.product_id)] });
       p = pr.rows[0] ? ({ ...pr.rows[0] } as unknown as Product) : null;
       if (!p || p.status !== "stock") throw new Error("Ese equipo ya no está disponible en stock");
+      if (p.store_id === 0) throw new Error("Ese equipo está en el almacén general. Trasládalo primero a una tienda.");
       if (g.user.role === "seller" && p.store_id !== g.user.store_id) throw new Error("Ese equipo está en la otra tienda. Trasládalo primero.");
       storeId = p.store_id;
       qty = p.kind === "accesorio" ? Math.min(Math.max(1, Number(b.qty) || 1), p.qty) : 1;
@@ -123,6 +125,16 @@ export async function POST(req: NextRequest) {
     else if (changed.length) { type = "venta_modificada"; flagged = 1; message += ` — con ${changed.length} corrección(es): ${changed.map((k) => `${k}: ${changes[k].from ?? "—"} → ${changes[k].to ?? "—"}`).join(", ")}`; }
     await tx.execute({ sql: "INSERT INTO alerts (type,message,sale_id,store_id,flagged) VALUES (?,?,?,?,?)", args: [type, message, saleId, storeId, flagged] });
     await tx.commit();
+    const head = late ? "⏰ VENTA FUERA DE TIEMPO" : p ? "🛒 NUEVA VENTA" : "🛒 NUEVA VENTA (equipo manual)";
+    const wa = [
+      head + " " + number,
+      String(desc),
+      "S/ " + price.toFixed(2) + " — " + payments.map((x) => x.method + " " + Number(x.amount).toFixed(2)).join(" + "),
+      store.name + " · " + g.user.name,
+      ...(changed.length ? ["⚠ Datos corregidos: " + changed.map((k) => k + ": " + (changes[k].from ?? "—") + " → " + (changes[k].to ?? "—")).join(", ")] : []),
+      ...(late ? ["Pendiente de tu aprobación (venta del " + dd + "/" + mm + "/" + yy + ")"] : []),
+    ].join("\n");
+    after(() => sendWhatsApp(wa));
     return NextResponse.json({ ok: true, id: saleId, number });
   } catch (e) {
     await tx.rollback();

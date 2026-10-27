@@ -47,6 +47,7 @@ const SCHEMA = [
     modified TEXT, day TEXT NOT NULL, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
   `CREATE INDEX IF NOT EXISTS idx_sales_day ON sales(day)`,
   `CREATE TABLE IF NOT EXISTS payments (id INTEGER PRIMARY KEY AUTOINCREMENT, sale_id INTEGER NOT NULL, method TEXT NOT NULL, amount REAL NOT NULL)`,
+  `CREATE TABLE IF NOT EXISTS settings (key TEXT PRIMARY KEY, value TEXT)`,
   `CREATE TABLE IF NOT EXISTS alerts (id INTEGER PRIMARY KEY AUTOINCREMENT, type TEXT NOT NULL, message TEXT NOT NULL, sale_id INTEGER, store_id INTEGER, flagged INTEGER DEFAULT 0, read INTEGER DEFAULT 0, created_at TEXT DEFAULT CURRENT_TIMESTAMP)`,
 ];
 
@@ -62,7 +63,7 @@ async function init() {
     { sql: "INSERT INTO users (username,name,role,password) VALUES ('admin','Administrador','admin',?)", args: [hashPassword(process.env.ADMIN_PASSWORD ?? "admin123")] },
     { sql: "INSERT INTO users (username,name,role) VALUES ('Jaime','Jaime','gerencia')", args: [] },
     { sql: "INSERT INTO users (username,name,role) VALUES ('Rosa','Rosa','admin')", args: [] },
-    { sql: "INSERT INTO users (username,name,role,store_id) VALUES ('Milagros','Milagros','seller',1)", args: [] },
+    { sql: "INSERT INTO users (username,name,role,store_id) VALUES ('Milagros','Milagros','seller',0)", args: [] },
   ];
   for (const [b, color] of Object.entries(BRAND_COLORS)) stmts.push({ sql: "INSERT INTO brands VALUES (?,?)", args: [b, color] });
   for (const [name, hex] of COLORS) stmts.push({ sql: "INSERT INTO colors VALUES (?,?)", args: [name, hex] });
@@ -77,6 +78,13 @@ async function init() {
 
 // Ajustes idempotentes que también aplican a bases ya creadas
 async function migrate(c: Client) {
+  try { await c.execute("ALTER TABLE products ADD COLUMN is_test INTEGER DEFAULT 0"); } catch {}
+  // Las vendedoras rotan entre tiendas: store_id 0 = ambas (se elige al entrar)
+  const rot = await c.execute("SELECT 1 FROM settings WHERE key='sellers_rotate'");
+  if (!rot.rows.length) {
+    await c.execute("UPDATE users SET store_id=0 WHERE role='seller'");
+    await c.execute("INSERT INTO settings (key,value) VALUES ('sellers_rotate','1')");
+  }
   await c.execute("UPDATE users SET username='Milagros' WHERE username='Milagros01'");
   await c.execute("DELETE FROM users WHERE username='Rosa02' AND id NOT IN (SELECT seller_id FROM sales WHERE seller_id IS NOT NULL)");
   await c.execute("UPDATE users SET role='admin' WHERE username='Rosa'");

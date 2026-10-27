@@ -21,7 +21,7 @@ export const num = (v: unknown) => {
 /** Busca otro producto en stock con el mismo código interno o IMEI (para avisar duplicados). */
 export async function findConflicts(opts: { code?: string | null; imeis?: (string | null)[]; ident?: string | null; excludeId?: number }) {
   const ex = opts.excludeId ?? -1;
-  const sel = `SELECT p.id,p.model,p.code,p.imei1,p.imei2,p.status,s.name AS store_name FROM products p JOIN stores s ON s.id=p.store_id`;
+  const sel = `SELECT p.id,p.model,p.code,p.imei1,p.imei2,p.status,COALESCE(s.name,'Almacén general') AS store_name FROM products p LEFT JOIN stores s ON s.id=p.store_id`;
   const code = opts.code
     ? await one(`${sel} WHERE p.code=? AND p.status='stock' AND p.id<>? LIMIT 1`, [opts.code, ex])
     : null;
@@ -38,7 +38,7 @@ export const stripCost = <T extends Record<string, unknown>>(rows: T[]) => rows.
 
 export async function listProducts(where: string[], args: (string | number)[]) {
   return all<Product & { store_name: string }>(
-    `SELECT p.*, s.name AS store_name FROM products p JOIN stores s ON s.id=p.store_id ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY p.brand, p.model, p.id`,
+    `SELECT p.*, COALESCE(s.name,'Almacén general') AS store_name FROM products p LEFT JOIN stores s ON s.id=p.store_id ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY p.brand, p.model, p.id`,
     args,
   );
 }

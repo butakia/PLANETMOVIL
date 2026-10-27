@@ -55,7 +55,7 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
   return (
     <div className="stagger space-y-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
-        <div><h1 className="text-2xl font-extrabold tracking-tight">{role === "seller" ? "Mis ventas" : "Ventas"}</h1>
+        <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">{role === "seller" ? "Mis ventas" : "Ventas"}</h1>
           <p className="text-sm text-slate-500"><b className="text-slate-800">{valid.length}</b> ventas · <b className="text-slate-800">{soles(total)}</b>{pending.length > 0 && <span className="ml-2 font-semibold text-amber-700">· {pending.length} pendiente(s) de aprobación</span>}</p></div>
         <div className="flex gap-2">
           {role === "seller" && <Link href="/vender" className="btn-primary">Ingresar venta</Link>}

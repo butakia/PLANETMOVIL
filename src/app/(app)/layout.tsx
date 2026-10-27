@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation";
 import { currentUser } from "@/lib/auth";
+import { all } from "@/lib/db";
 import Shell from "@/components/Shell";
 
 export const dynamic = "force-dynamic";
@@ -7,5 +8,6 @@ export const dynamic = "force-dynamic";
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const user = await currentUser();
   if (!user) redirect("/login");
-  return <Shell user={user}>{children}</Shell>;
+  const stores = user.rotating ? await all<{ id: number; name: string; color: string }>("SELECT id,name,color FROM stores ORDER BY id") : [];
+  return <Shell user={user} stores={stores}>{children}</Shell>;
 }

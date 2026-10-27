@@ -18,7 +18,8 @@
 }
 
 body {
-  background: var(--bg);
+  background: radial-gradient(900px 420px at 100% -5%, #dbeafe 0%, transparent 60%), radial-gradient(700px 360px at -5% 12%, #cffafe 0%, transparent 55%), var(--bg);
+  background-attachment: fixed;
   color: var(--ink);
   font-family: var(--font-sans);
   -webkit-tap-highlight-color: transparent;
@@ -65,3 +66,9 @@ body {
 .lift { transition: transform .2s ease, box-shadow .2s ease; }
 .lift:hover { transform: translateY(-2px); box-shadow: 0 10px 28px -12px rgb(30 58 138 / .35); }
 @media (prefers-reduced-motion: reduce) { .anim-in, .anim-pop, .anim-sheet, .anim-fade, .stagger > * { animation: none; } }
+
+@media print {
+  body * { visibility: hidden; }
+  .print-area, .print-area * { visibility: visible; }
+  .print-area { position: absolute; left: 0; top: 0; gap: 0 !important; }
+}

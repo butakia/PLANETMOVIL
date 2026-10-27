@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { one } from "./db";
 
 export type Role = "admin" | "seller" | "gerencia";
-export type User = { id: number; username: string; name: string; role: Role; store_id: number | null };
+export type User = { id: number; username: string; name: string; role: Role; store_id: number | null; rotating?: boolean };
 
 if (process.env.VERCEL && !process.env.SESSION_SECRET) throw new Error("Falta la variable SESSION_SECRET en Vercel (ver LEEME.md)");
 const secret = new TextEncoder().encode(process.env.SESSION_SECRET ?? "planet-movil-dev-secret-cambiar-en-produccion");
@@ -28,7 +28,12 @@ export async function currentUser(): Promise<User | null> {
   if (!token) return null;
   try {
     const { payload } = await jwtVerify(token, secret);
-    return await one<User>("SELECT id,username,name,role,store_id FROM users WHERE id=? AND active=1", [Number(payload.uid)]);
+    const u = await one<User>("SELECT id,username,name,role,store_id FROM users WHERE id=? AND active=1", [Number(payload.uid)]);
+    if (u && u.role === "seller" && !u.store_id) {
+      const c = Number((await cookies()).get("pm_store")?.value);
+      return { ...u, store_id: c === 2 ? 2 : 1, rotating: true };
+    }
+    return u;
   } catch {
     return null;
   }

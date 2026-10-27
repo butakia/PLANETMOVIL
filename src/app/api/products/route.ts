@@ -19,6 +19,15 @@ export async function GET(req: NextRequest) {
     where.push("(p.model LIKE ? OR p.brand LIKE ? OR p.code LIKE ? OR p.imei1 LIKE ? OR p.imei2 LIKE ? OR p.ident LIKE ? OR p.color LIKE ?)");
     args.push(like, like, like, like, like, like, like);
   }
+  if (sp.get("color")) { where.push("p.color=? COLLATE NOCASE"); args.push(sp.get("color")!); }
+  if (sp.get("ram")) { where.push("p.ram=?"); args.push(Number(sp.get("ram"))); }
+  if (sp.get("storage")) { where.push("p.storage=?"); args.push(Number(sp.get("storage"))); }
+  if (sp.get("condition")) { where.push("p.condition=?"); args.push(sp.get("condition")!); }
+  if (sp.get("from")) { where.push("p.entry_date>=?"); args.push(sp.get("from")!); }
+  if (sp.get("to")) { where.push("p.entry_date<=?"); args.push(sp.get("to")!); }
+  if (sp.get("pmin")) { where.push("p.price_suggested>=?"); args.push(Number(sp.get("pmin"))); }
+  if (sp.get("pmax")) { where.push("p.price_suggested<=?"); args.push(Number(sp.get("pmax"))); }
+  if (sp.get("noprice")) { where.push("p.price_suggested IS NULL"); }
   if (sp.get("code")) { where.push("p.code=?"); args.push(sp.get("code")!); }
   const rows = await listProducts(where, args);
   return NextResponse.json({ products: g.user.role === "seller" ? stripCost(rows) : rows });
@@ -32,7 +41,7 @@ export async function POST(req: NextRequest) {
   const model = clean(b.model);
   const store_id = Number(b.store_id);
   if (!model) return NextResponse.json({ error: "Falta el modelo / nombre" }, { status: 400 });
-  if (![1, 2].includes(store_id)) return NextResponse.json({ error: "Elige la tienda" }, { status: 400 });
+  if (![0, 1, 2].includes(store_id)) return NextResponse.json({ error: "Elige la tienda o el almacén general" }, { status: 400 });
 
   const imei1 = kind === "celular" ? clean(b.imei1) : null;
   const imei2 = kind === "celular" ? clean(b.imei2) : null;
@@ -55,5 +64,11 @@ export async function POST(req: NextRequest) {
       clean(b.color), kind === "celular" ? clean(b.condition) : null, qty, num(b.price_suggested), num(b.cost), clean(b.supplier),
       clean(b.purchase_date) ?? (num(b.cost) !== null ? clean(b.entry_date) : null), clean(b.entry_date) ?? limaDay(), clean(b.notes), g.user.name],
   );
-  return NextResponse.json({ ok: true, id: Number(r.lastInsertRowid) });
+  const id = Number(r.lastInsertRowid);
+  let genIdent = ident;
+  if (kind === "accesorio" && !ident) {
+    genIdent = "ACC-" + String(id).padStart(6, "0");
+    await run("UPDATE products SET ident=? WHERE id=?", [genIdent, id]);
+  }
+  return NextResponse.json({ ok: true, id, ident: genIdent });
 }
