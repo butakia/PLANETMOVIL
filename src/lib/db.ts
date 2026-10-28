@@ -116,6 +116,23 @@ async function migrate(c: Client) {
   await flagRepeatedImei(c);
   await restoreRepeatedImei(c);
   await replaceStockV3(c);
+  await cleanStockV4(c);
+}
+
+// Una sola vez: nombres de modelo ordenados (mayúsculas, typos, RAM/almacenamiento sacados del nombre) e incautados en su propia pestaña.
+async function cleanStockV4(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='stock_v4'")).rows.length) return;
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const [, sold, code, old, imei, color, , , model, brand, ram, storage, seized] of STOCK_V3.trim().split("\n").map((l) => l.split("|"))) {
+    stmts.push({ sql: "INSERT OR IGNORE INTO brands (name,color) VALUES (?,?)", args: [brand, "#64748b"] });
+    stmts.push({ sql: "INSERT OR IGNORE INTO models (name,brand,def_ram,def_storage) VALUES (?,?,?,?)", args: [model, brand, ram ? +ram : 4, storage ? +storage : 64] });
+    const who = "kind='celular' AND model=? AND COALESCE(code,'')=? AND COALESCE(imei1,'')=?";
+    const vals = [model, brand, ram ? +ram : null, storage ? +storage : null, color || null];
+    stmts.push({ sql: `UPDATE products SET model=?, brand=?, ram=?, storage=?, color=? WHERE ${who}`, args: [...vals, old, code, imei] });
+    if (seized === "1" && sold === "0") stmts.push({ sql: `UPDATE products SET status='incautado' WHERE status='stock' AND ${who}`, args: [model, code, imei] });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('stock_v4','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: sustituye el stock por el de las hojas de julio 2026 (con vendidos) y crea Red i Mobile y Jaimes Tienda.

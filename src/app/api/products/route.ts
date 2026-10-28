@@ -42,7 +42,7 @@ export async function POST(req: NextRequest) {
   const model = clean(b.model);
   const store_id = Number(b.store_id);
   if (!model) return NextResponse.json({ error: "Falta el modelo / nombre" }, { status: 400 });
-  if (![0, 1, 2].includes(store_id)) return NextResponse.json({ error: "Elige la tienda o el almacén general" }, { status: 400 });
+  if (![0, 1, 2, 3, 4].includes(store_id)) return NextResponse.json({ error: "Elige la tienda o el almacén general" }, { status: 400 });
 
   const imei1 = kind === "celular" ? clean(b.imei1) : null;
   const imei2 = kind === "celular" ? clean(b.imei2) : null;

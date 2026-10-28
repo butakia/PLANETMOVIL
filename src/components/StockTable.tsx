@@ -14,6 +14,8 @@ type P = {
   price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null;
 };
 
+const statusLabel = (s: string) => (s === "stock" ? "En stock" : s === "incautado" ? "Incautado" : "Vendido");
+
 export default function StockTable({ role }: { role: "admin" | "seller" | "gerencia" }) {
   const { cat, brandColor, colorHex } = useCatalog();
   const [rows, setRows] = useState<P[]>([]);
@@ -74,7 +76,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   function exportCsv() {
     downloadCSV(`stock-${new Date().toISOString().slice(0, 10)}.csv`, [
       ["Tienda", "Tipo", "Marca", "Modelo", "RAM", "Almacenamiento", "Color", "Estado caja", "Cód. interno", "IMEI 1", "IMEI 2", "Cód. identificación", "Cantidad", "Precio sugerido", "Fecha ingreso", "Situación"],
-      ...rows.map((r) => [r.store_name, r.kind, r.brand, r.model, r.ram || "", r.storage ? storageLabel(r.storage) : "", r.color, r.condition, r.code, r.imei1, r.imei2, r.ident, r.qty, r.price_suggested, fmtDay(r.entry_date), r.status === "stock" ? "En stock" : "Vendido"]),
+      ...rows.map((r) => [r.store_name, r.kind, r.brand, r.model, r.ram || "", r.storage ? storageLabel(r.storage) : "", r.color, r.condition, r.code, r.imei1, r.imei2, r.ident, r.qty, r.price_suggested, fmtDay(r.entry_date), statusLabel(r.status)]),
     ]);
   }
 
@@ -99,6 +101,12 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         ))}
       </div>
 
+      <div className="flex gap-1.5 overflow-x-auto">
+        {[["stock", "En stock"], ["sold", "Vendidos"], ["incautado", "Incautados"], ["all", "Todos"]].map(([id, name]) => (
+          <button key={id} onClick={() => setStatus(id)} className={`chip whitespace-nowrap ${status === id ? "chip-on" : ""}`}>{name}</button>
+        ))}
+      </div>
+
       <div className="card flex flex-wrap items-center gap-2 p-3">
         <div className="relative min-w-52 flex-1">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -110,9 +118,6 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         </select>
         <select className="input !w-auto" value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="">Celulares y accesorios</option><option value="celular">Celulares</option><option value="accesorio">Accesorios</option>
-        </select>
-        <select className="input !w-auto" value={status} onChange={(e) => setStatus(e.target.value)}>
-          <option value="stock">En stock</option><option value="sold">Vendidos</option><option value="all">Todos</option>
         </select>
         <label className="flex items-center gap-2 px-2 text-sm font-medium text-slate-600"><input type="checkbox" className="accent-blue-600" checked={group} onChange={(e) => setGroup(e.target.checked)} /> Agrupar por marca</label>
         <button onClick={() => setAdv(!adv)} className={`chip !py-1.5 text-xs ${adv || activeAdv ? "chip-on" : ""}`}>Más filtros{activeAdv ? ` (${activeAdv})` : ""}</button>
@@ -172,7 +177,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td font-mono text-xs">{r.imei2 ?? r.ident ?? "—"}</td>
                         <td className="td font-semibold">{soles(r.price_suggested)}</td>
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>
-                        {status !== "stock" && <td className="td">{r.status === "stock" ? "En stock" : "Vendido"}</td>}
+                        {status !== "stock" && <td className="td">{statusLabel(r.status)}</td>}
                         <td className="td">{role === "admin" && r.kind === "accesorio" && <Link href={"/etiquetas?id=" + r.id} title="Etiqueta QR / código de barras" className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><QrCode className="h-4 w-4" /></Link>}{role === "admin" && <button onClick={() => setEdit(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><Pencil className="h-4 w-4" /></button>}</td>
                       </tr>
                     );

@@ -26,7 +26,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     for (const k of text) if (k in b) set(k, clean(b[k]));
     for (const k of ["ram", "storage", "qty"] as const) if (k in b) set(k, num(b[k]));
     if ("store_id" in b) set("store_id", Number(b.store_id));
-    if ("status" in b) set("status", b.status === "sold" ? "sold" : "stock");
+    if ("status" in b) set("status", b.status === "sold" ? "sold" : b.status === "incautado" ? "incautado" : "stock");
     const code = "code" in b ? clean(b.code) : cur.code;
     const imei1 = "imei1" in b ? clean(b.imei1) : cur.imei1;
     const imei2 = "imei2" in b ? clean(b.imei2) : cur.imei2;

@@ -10,7 +10,7 @@ export async function POST(req: NextRequest) {
   if (g.error) return g.error;
   const { ids, store_id, qty } = (await req.json()) as { ids: number[]; store_id: number; qty?: number };
   const to = Number(store_id);
-  if (![0, 1, 2].includes(to) || !Array.isArray(ids) || !ids.length) return NextResponse.json({ error: "Elige equipos y tienda" }, { status: 400 });
+  if (![0, 1, 2, 3, 4].includes(to) || !Array.isArray(ids) || !ids.length) return NextResponse.json({ error: "Elige equipos y tienda" }, { status: 400 });
   let moved = 0;
   for (const id of ids) {
     const p = await one<Product>("SELECT * FROM products WHERE id=?", [Number(id)]);
