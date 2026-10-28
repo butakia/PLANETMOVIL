@@ -2,13 +2,15 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ArrowLeft, ArrowLeftRight, Camera, ChevronRight, Clock, Headphones, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart, Smartphone } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, Camera, ChevronRight, Clock, Headphones, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart, Smartphone, Wrench } from "lucide-react";
 import { api } from "@/lib/client";
 import { limaToday, METHODS, soles, specLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import BarcodeScanner from "./BarcodeScanner";
 import NumPad from "./NumPad";
 import SimpleAccessory, { accessoryName, type Accessory } from "./SimpleAccessory";
+import ServiceFields, { type Service } from "./ServiceFields";
+import SaleSuccess from "./SaleSuccess";
 
 type P = {
   id: number; kind: "celular" | "accesorio"; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -21,8 +23,10 @@ const boxLabel = (c?: string | null) => (!c ? "—" : c.toLowerCase().startsWith
 export default function SaleForm({ user, late = false }: { user: { role: string; store_id: number | null; name: string }; late?: boolean }) {
   const router = useRouter();
   const { cat, brandColor } = useCatalog();
-  const [mode, setMode] = useState<null | "celular" | "accesorio">(null);
+  const [mode, setMode] = useState<null | "celular" | "accesorio" | "servicio">(null);
   const [acc, setAcc] = useState<Accessory | null>(null);
+  const [svc, setSvc] = useState<Service>({ technician: "", detail: "" });
+  const [success, setSuccess] = useState(false);
   const [code, setCode] = useState("");
   const [matches, setMatches] = useState<P[]>([]);
   const [p, setP] = useState<P | null>(null);
@@ -87,11 +91,13 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
     setAmt({ [m]: v, [other]: rest > 0 ? String(rest) : "0" });
   }
   const remaining = Math.round((total - paid) * 100) / 100;
-  const hasItem = !!p || manual || !!acc;
+  const isSvc = mode === "servicio";
+  const svcReady = isSvc && !!svc.technician.trim() && !!svc.detail.trim();
+  const hasItem = !!p || manual || !!acc || svcReady;
   const isAcc = !!acc || p?.kind === "accesorio";
-  const itemName = acc ? [accessoryName(acc), acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
+  const itemName = isSvc ? `Servicio técnico: ${svc.detail.trim()}` : acc ?[accessoryName(acc), acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
 
-  function chooseMode(m: "celular" | "accesorio") {
+  function chooseMode(m: "celular" | "accesorio" | "servicio") {
     setMode(m); setErr("");
   }
   function backToChoice() {
@@ -115,6 +121,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
 
   function review() {
     setErr("");
+    if (mode === "servicio" && !svc.technician.trim()) return setErr("Escribe el nombre del técnico");
+    if (mode === "servicio" && !svc.detail.trim()) return setErr("Escribe el detalle del servicio");
     if (mode === "accesorio" && !acc?.name.trim()) return setErr("Escribe el nombre del accesorio");
     if (mode === "accesorio" && !acc?.category) return setErr("Elige la categoría (cargador, cable, audífonos, funda u otro)");
     if (manual && !fields.model?.trim()) return setErr("Escribe el modelo del equipo");
@@ -134,9 +142,13 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
           product_id: p?.id, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
           manual: manual ? { ...fields, store_id: mStore } : undefined,
           accessory: acc ? { name: accessoryName(acc), detail: acc.detail.trim(), store_id: mStore, category: acc.category } : undefined,
+          service: isSvc ? { technician: svc.technician.trim(), detail: svc.detail.trim(), store_id: mStore } : undefined,
           payments: payList,
         },
       });
+      setConfirm(false);
+      setSuccess(true);
+      await new Promise((res) => setTimeout(res, 1900));
       router.push(`/recibo/${r.id}?nueva=1`);
     } catch (e) {
       setErr((e as Error).message);
@@ -169,10 +181,11 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       {mode === null && (
         <div className="anim-pop">
           <p className="mb-3 text-center text-sm font-semibold text-slate-500">¿Qué vas a vender?</p>
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-4 sm:grid-cols-3">
             {([
               { m: "celular", label: "Celulares", sub: "Por código interno o IMEI", icon: Smartphone, c: "from-blue-900 to-sky-600" },
-              { m: "accesorio", label: "Accesorios", sub: "Cargadores, cables, fundas, vidrios…", icon: Headphones, c: "from-emerald-700 to-teal-500" },
+              { m: "accesorio", label: "Accesorios", sub: "Cargadores, cables, vidrios, hidrogel…", icon: Headphones, c: "from-emerald-700 to-teal-500" },
+              { m: "servicio", label: "Servicio técnico", sub: "Reparaciones y revisiones", icon: Wrench, c: "from-amber-600 to-orange-500" },
             ] as const).map(({ m, label, sub, icon: I, c }) => (
               <button key={m} type="button" onClick={() => chooseMode(m)}
                 className={`lift group flex min-h-44 flex-col items-center justify-center gap-3 rounded-3xl bg-gradient-to-br ${c} p-6 text-center text-white shadow-lg active:scale-[0.98]`}>
@@ -199,6 +212,19 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
               <select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
           )}
           {acc && <button type="button" onClick={backToChoice} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">← Cambiar (celulares / accesorios)</button>}
+        </div>
+      )}
+
+      {/* 1c. Servicio técnico */}
+      {mode === "servicio" && (
+        <div className="card p-4 sm:p-5">
+          <label className="label !mb-3">1 · Servicio técnico</label>
+          <ServiceFields onChange={setSvc} />
+          {svcReady && user.role === "admin" && cat && (
+            <div className="mt-3"><label className="label">Tienda</label>
+              <select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          )}
+          {svcReady && <button type="button" onClick={backToChoice} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">← Cambiar (celulares / accesorios / servicio)</button>}
         </div>
       )}
 
@@ -364,9 +390,9 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4 text-sm">
               {late && <div className="font-semibold text-amber-800">Fecha de la venta: {saleDate.split("-").reverse().join("/")}</div>}
               <div><div className="text-lg font-extrabold">{itemName}</div>
-                {!acc && <div className="text-slate-600">{[specLabel(Number(fields.ram) || null, Number(fields.storage) || null), fields.color, !isAcc ? boxLabel(fields.condition) : ""].filter((x) => x && x !== "—").join(" · ")}</div>}</div>
-              {acc ? null : (!isAcc) ?<div className="font-mono text-xs text-slate-600">IMEI 1: {fields.imei1 || "—"}{fields.imei2 ? <><br />IMEI 2: {fields.imei2}</> : null}</div> : p?.ident ? <div className="font-mono text-xs text-slate-600">Cód.: {p.ident}</div> : null}
-              <div className="text-xs text-slate-500">{acc ? "Accesorio" : manual ? `Equipo no registrado en stock${fields.code ? ` · cód. ${fields.code}` : ""}` : `Cód. interno ${p?.code ?? "—"}`} · {store?.name}{isAcc && qty > 1 ? ` · ${qty} unidades` : ""}</div>
+                {!acc && !isSvc && <div className="text-slate-600">{[specLabel(Number(fields.ram) || null, Number(fields.storage) || null), fields.color, !isAcc ? boxLabel(fields.condition) : ""].filter((x) => x && x !== "—").join(" · ")}</div>}</div>
+              {acc || isSvc ? null : (!isAcc) ?<div className="font-mono text-xs text-slate-600">IMEI 1: {fields.imei1 || "—"}{fields.imei2 ? <><br />IMEI 2: {fields.imei2}</> : null}</div> : p?.ident ? <div className="font-mono text-xs text-slate-600">Cód.: {p.ident}</div> : null}
+              <div className="text-xs text-slate-500">{isSvc ? `Servicio técnico · Técnico: ${svc.technician.trim()}` : acc ? "Accesorio" : manual ? `Equipo no registrado en stock${fields.code ? ` · cód. ${fields.code}` : ""}` : `Cód. interno ${p?.code ?? "—"}`} · {store?.name}{isAcc && qty > 1 ? ` · ${qty} unidades` : ""}</div>
               <hr className="border-slate-200" />
               <div className="flex items-end justify-between"><span className="font-semibold">Total a cobrar</span><span className="text-2xl font-extrabold">{soles(total)}</span></div>
               <div className="text-slate-600">{payList.map((x, i) => <div key={i} className="flex justify-between"><span>{x.method}</span><span>{soles(x.amount)}</span></div>)}</div>
@@ -383,6 +409,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
         </div>,
         document.body,
       )}
+      {success && mounted && createPortal(<SaleSuccess />, document.body)}
       {cam && <BarcodeScanner onClose={() => setCam(false)} onScan={(c) => { setCode(c); search(c); }} />}
     </div>
   );

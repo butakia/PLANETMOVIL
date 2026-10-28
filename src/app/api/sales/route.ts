@@ -104,6 +104,13 @@ export async function POST(req: NextRequest) {
       storeId = g.user.role === "seller" ? (g.user.store_id ?? 1) : [2, 3, 4].includes(Number(a.store_id)) ? Number(a.store_id) : 1;
       qty = Math.min(Math.max(1, Math.floor(Number(b.qty)) || 1), 999);
       item = { kind: "accesorio", brand: clean(a.category), model: detail ? `${name} ${detail}` : name, ram: null, storage: null, color: null, condition: null, imei1: null, imei2: null, ident: null, code: null };
+    } else if (b.service) {
+      const sv = b.service as { technician?: string; detail?: string };
+      const technician = clean(sv.technician), detail = clean(sv.detail);
+      if (!technician) throw new Error("Escribe el nombre del técnico");
+      if (!detail) throw new Error("Escribe el detalle del servicio");
+      storeId = g.user.role === "seller" ? (g.user.store_id ?? 1) : [2, 3, 4].includes(Number((b.service as { store_id?: number }).store_id)) ? Number((b.service as { store_id?: number }).store_id) : 1;
+      item = { kind: "servicio", brand: "Servicio técnico", model: `Servicio técnico: ${detail}`, ram: null, storage: null, color: null, condition: null, imei1: null, imei2: null, ident: null, code: null, technician };
     } else throw new Error("Falta elegir o escribir el equipo");
 
     const store = (await tx.execute({ sql: "SELECT series,name FROM stores WHERE id=?", args: [storeId] })).rows[0];
@@ -115,7 +122,7 @@ export async function POST(req: NextRequest) {
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [storeId, seq, number, p?.id ?? null, g.user.id, g.user.name, JSON.stringify(item), qty, price, p?.price_suggested ?? null,
         p && p.cost !== null && p.cost !== undefined ? Number(p.cost) * qty : null, clean(b.customer_name) ?? "Cliente varios", clean(b.phone), clean(b.dni),
-        changed.length ? JSON.stringify(changes) : null, day, late ? "pending" : "ok", late ? 1 : 0, p || b.accessory ? 0 : 1],
+        changed.length ? JSON.stringify(changes) : null, day, late ? "pending" : "ok", late ? 1 : 0, p || b.accessory || b.service ? 0 : 1],
     });
     const saleId = Number(ins.lastInsertRowid);
     for (const x of payments) await tx.execute({ sql: "INSERT INTO payments (sale_id,method,amount) VALUES (?,?,?)", args: [saleId, x.method, Number(x.amount)] });
@@ -125,8 +132,8 @@ export async function POST(req: NextRequest) {
       await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=?, sale_price=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? g.user.name : null, left <= 0 ? price / qty : null, p.id] });
     }
 
-    const noStock = !p && !b.accessory;
-    const desc = [qty > 1 && item.kind === "accesorio" ? `${qty}×` : "", item.model, item.ram ? `${item.ram}GB RAM` : "", item.storage ? `${item.storage}GB` : ""].filter(Boolean).join(" ");
+    const noStock = !p && !b.accessory && !b.service;
+    const desc = [qty > 1 && item.kind === "accesorio" ? `${qty}×` : "", item.model, item.technician ? `(técnico: ${item.technician})` : "", item.ram ? `${item.ram}GB RAM` : "", item.storage ? `${item.storage}GB` : ""].filter(Boolean).join(" ");
     const [yy, mm, dd] = day.split("-");
     let type = "venta", flagged = 0, message = `${g.user.name} vendió ${desc} por S/ ${price.toFixed(2)} en ${store.name}`;
     if (late) { type = "venta_tardia"; flagged = 1; message = `${g.user.name} registró una venta FUERA DE TIEMPO del ${dd}/${mm}/${yy}: ${desc} por S/ ${price.toFixed(2)} en ${store.name}${noStock ? " (equipo no registrado en stock)" : ""}. Pendiente de tu aprobación.`; }

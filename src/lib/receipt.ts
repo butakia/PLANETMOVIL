@@ -6,7 +6,7 @@ export type SaleDoc = {
   id: number; number: string; created_at: string; day: string; qty: number; price: number; seller_name: string; status?: string; late?: number; manual?: number;
   customer_name: string | null; phone: string | null; dni: string | null;
   store_name: string; store_address: string; store_phone: string; store_ruc: string; store_owner: string;
-  item: { kind: string; brand: string | null; model: string; ram: number | null; storage: number | null; color: string | null; condition: string | null; imei1: string | null; imei2: string | null; ident: string | null; code: string | null };
+  item: { kind: string; brand: string | null; model: string; ram: number | null; storage: number | null; color: string | null; condition: string | null; imei1: string | null; imei2: string | null; ident: string | null; code: string | null; technician?: string | null };
   payments: { method: string; amount: number }[];
 };
 
@@ -14,6 +14,7 @@ export const money = (n: number) => n.toLocaleString("en-US", { minimumFractionD
 
 export function describe(s: SaleDoc) {
   const i = s.item;
+  if (i.kind === "servicio") return [i.model.toUpperCase(), `Técnico: ${i.technician ?? "—"}`];
   const parts = [i.kind === "celular" ? "CELULAR" : "", i.model.toUpperCase()];
   if (i.ram) parts.push(`${i.ram}GB RAM`);
   if (i.storage) parts.push(`${i.storage >= 1024 ? i.storage / 1024 + "TB" : i.storage + "GB"} ALMACENAMIENTO`);
