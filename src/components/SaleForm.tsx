@@ -251,7 +251,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
                 <AlertTriangle className="h-4 w-4" />
                 {inAlmacen ? <span>Este equipo pertenece a <b>Almacén</b>. Transfiérelo para poder venderlo.</span> : <span>Este equipo está en <b>{p?.store_name}</b>, no en tu tienda.</span>}
                 {user.store_id
-                  ? <button onClick={() => transfer()} className="btn-primary ml-auto !py-1.5"><ArrowLeftRight className="h-4 w-4" /> {inAlmacen ? "Transferir a mi tienda" : "Traer a mi tienda"}</button>
+                  ? <button onClick={() => transfer()} className="btn-primary ml-auto !py-1.5"><ArrowLeftRight className="h-4 w-4" /> {inAlmacen ? "Transferir a" : "Traer a"} {cat?.stores.find((s) => s.id === user.store_id)?.name ?? "mi tienda"}</button>
                   : <span className="ml-auto flex flex-wrap gap-2">{cat?.stores.map((s) => <button key={s.id} onClick={() => transfer(s.id)} className="btn-primary !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Transferir a {s.name}</button>)}</span>}
               </div>
             )}

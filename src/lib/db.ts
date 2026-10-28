@@ -117,6 +117,40 @@ async function migrate(c: Client) {
   await restoreRepeatedImei(c);
   await replaceStockV3(c);
   await cleanStockV4(c);
+  await createAndres(c);
+  await purgeTestSales(c, "2026-10-28");
+}
+
+// Una sola vez: Andres, vendedor fijo de Red i Mobile (tienda 3).
+async function createAndres(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='andres_v1'")).rows.length) return;
+  const pw = hashPassword("hola123");
+  const ex = await c.execute("SELECT 1 FROM users WHERE username='Andres'");
+  await c.batch([
+    ex.rows.length
+      ? { sql: "UPDATE users SET name='Andres', role='seller', store_id=3, password=?, active=1 WHERE username='Andres'", args: [pw] }
+      : { sql: "INSERT INTO users (username,name,role,store_id,password) VALUES ('Andres','Andres','seller',3,?)", args: [pw] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('andres_v1','1')", args: [] },
+  ], "write");
+}
+
+// Una sola vez: borra las ventas de prueba que hizo Omar ese día y devuelve los equipos al stock.
+async function purgeTestSales(c: Client, day: string) {
+  const key = `purge_sales_${day}`;
+  if ((await c.execute({ sql: "SELECT 1 FROM settings WHERE key=?", args: [key] })).rows.length) return;
+  const omar = (await c.execute("SELECT id FROM users WHERE username='Omar'")).rows[0];
+  const sales = omar ? (await c.execute({ sql: "SELECT id,product_id,qty,status FROM sales WHERE day=? AND seller_id=?", args: [day, Number(omar.id)] })).rows : [];
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const s of sales) {
+    const id = Number(s.id);
+    if (s.product_id && s.status === "ok") stmts.push({ sql: "UPDATE products SET qty=qty+?, status='stock' WHERE id=? AND status IN ('sold','stock')", args: [Number(s.qty), Number(s.product_id)] });
+    stmts.push({ sql: "DELETE FROM payments WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM alerts WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM sales WHERE id=?", args: [id] });
+  }
+  if (sales.length) stmts.push({ sql: "INSERT INTO alerts (type,message,flagged) VALUES ('anulacion',?,0)", args: [`Se borraron ${sales.length} venta(s) de prueba del ${day.split("-").reverse().join("/")} y los equipos volvieron al stock.`] });
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES (?,?)", args: [key, String(sales.length)] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: nombres de modelo ordenados (mayúsculas, typos, RAM/almacenamiento sacados del nombre) e incautados en su propia pestaña.
