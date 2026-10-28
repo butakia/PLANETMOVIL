@@ -113,6 +113,7 @@ async function migrate(c: Client) {
   await loadSolucionesStock(c);
   await loadExtraStock(c);
   await flagRepeatedImei(c);
+  await restoreRepeatedImei(c);
 }
 
 // Una sola vez: marca en rojo (Stock) los equipos cuyo IMEI venía repetido en las hojas, para corregirlos a mano.
@@ -123,6 +124,15 @@ async function flagRepeatedImei(c: Client) {
     { sql: `UPDATE products SET flag='IMEI repetido' WHERE status='stock' AND imei1 IS NULL AND code IN (${noImei.map(() => "?").join(",")})`, args: noImei },
     { sql: "UPDATE products SET flag='IMEI repetido' WHERE status='stock' AND store_id=2 AND code IN ('A104','8359')", args: [] },
     { sql: "INSERT INTO settings (key,value) VALUES ('flag_imei_v1','1')", args: [] },
+  ], "write");
+}
+
+// Una sola vez: devuelve a esos equipos el IMEI que traía la hoja; se muestra con la marca "IMEI repetido" al lado.
+async function restoreRepeatedImei(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='restore_imei_v1'")).rows.length) return;
+  await c.batch([
+    { sql: "UPDATE products SET imei1='353207809078565' WHERE flag='IMEI repetido' AND imei1 IS NULL", args: [] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('restore_imei_v1','1')", args: [] },
   ], "write");
 }
 

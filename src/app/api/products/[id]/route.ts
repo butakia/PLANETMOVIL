@@ -35,7 +35,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if ("imei1" in b && imei1 && imei1 !== cur.imei1) set("flag", null); // IMEI corregido: se quita la marca roja
     if ("imei2" in b) set("imei2", imei2);
     if ("ident" in b) set("ident", clean(b.ident));
-    const c = await findConflicts({ code, imeis: [imei1, imei2], excludeId: id });
+    // Solo se valida lo que realmente cambió, para poder editar otros campos de un equipo con IMEI o código repetido.
+    const c = await findConflicts({
+      code: code !== cur.code ? code : null,
+      imeis: [imei1 !== cur.imei1 ? imei1 : null, imei2 !== cur.imei2 ? imei2 : null],
+      excludeId: id,
+    });
     if (c.code) {
       const x = c.code as Record<string, unknown>;
       return NextResponse.json({ error: `El código ${code} ya está en uso: ${x.model} en ${x.store_name}` }, { status: 409 });

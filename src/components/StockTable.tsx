@@ -85,6 +85,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <p className="text-sm text-slate-500"><b className="text-slate-800">{totals.units}</b> unidades · valorizado a precio sugerido <b className="text-slate-800">{soles(totals.value)}</b></p>
         </div>
         <div className="flex gap-2">
+          {role === "admin" && <Link href="/stock/editar" className="btn-primary !bg-amber-500 hover:!bg-amber-600"><Pencil className="h-4 w-4" /> Editar</Link>}
           {role === "admin" && <button onClick={() => setImporting(true)} className="btn-ghost"><Upload className="h-4 w-4" /> Importar hoja</button>}
           <button onClick={exportCsv} className="btn-ghost"><Download className="h-4 w-4" /> Descargar Excel/CSV</button>
           {role === "admin" && <Link href="/stock/nuevo" className="btn-primary"><Plus className="h-4 w-4" /> Ingresar</Link>}
