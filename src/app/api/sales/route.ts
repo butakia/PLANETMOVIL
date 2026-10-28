@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse, after } from "next/server";
-import { sendWhatsApp } from "@/lib/notify";
+import { sendNotify } from "@/lib/notify";
 import { all, db } from "@/lib/db";
 import { guard, limaDay } from "@/lib/auth";
 import { clean, num, type Product } from "@/lib/products";
@@ -169,7 +169,7 @@ export async function POST(req: NextRequest) {
       ...(changed.length ? ["⚠ Datos corregidos: " + changed.map((k) => k + ": " + (changes[k].from ?? "—") + " → " + (changes[k].to ?? "—")).join(", ")] : []),
       ...(late ? ["Pendiente de tu aprobación (venta del " + dd + "/" + mm + "/" + yy + ")"] : []),
     ].join("\n");
-    after(() => sendWhatsApp(wa));
+    after(() => sendNotify(wa));
     return NextResponse.json({ ok: true, id: saleId, number });
   } catch (e) {
     await tx.rollback();
