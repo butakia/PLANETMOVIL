@@ -10,7 +10,7 @@ import ImportModal from "./ImportModal";
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
   ident: string | null; code: string | null; ram: number | null; storage: number | null; color: string | null; condition: string | null; qty: number;
-  price_suggested: number | null; entry_date: string; status: string; is_test?: number;
+  price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null;
 };
 
 export default function StockTable({ role }: { role: "admin" | "seller" | "gerencia" }) {
@@ -156,7 +156,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                   {list.map((r) => {
                     const bc = brandColor(r.brand);
                     return (
-                      <tr key={r.id} className="hover:brightness-95" style={{ background: bc + "12" }}>
+                      <tr key={r.id} className="hover:brightness-95" style={r.flag ? { background: "#fee2e2", outline: "2px solid #dc2626", outlineOffset: "-2px" } : { background: bc + "12" }}>
                         {role === "admin" && <td className="td" style={{ borderLeft: `5px solid ${bc}` }}><input type="checkbox" className="h-4 w-4 accent-blue-700" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>}
                         <td className="td font-mono font-bold" style={role === "admin" ? undefined : { borderLeft: `5px solid ${bc}` }}>{r.code ?? "—"}</td>
                         <td className="td"><span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: cat?.stores.find((s) => s.id === r.store_id)?.color ?? "#64748b" }}>{r.store_name}</span></td>
@@ -166,7 +166,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td">{r.storage ? storageLabel(r.storage) : "—"}</td>
                         <td className="td">{r.color ? <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border border-slate-300" style={{ background: colorHex(r.color) }} />{r.color}</span> : "—"}</td>
                         <td className="td">{r.condition ?? "—"}</td>
-                        <td className="td font-mono text-xs">{r.imei1 ?? "—"}</td>
+                        <td className="td font-mono text-xs">{r.imei1 ?? "—"}{r.flag ? <span className="ml-1.5 rounded bg-red-600 px-1.5 font-sans text-[10px] font-bold text-white">{r.flag}</span> : null}</td>
                         <td className="td font-mono text-xs">{r.imei2 ?? r.ident ?? "—"}</td>
                         <td className="td font-semibold">{soles(r.price_suggested)}</td>
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>

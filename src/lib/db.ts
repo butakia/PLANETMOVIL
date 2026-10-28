@@ -109,8 +109,21 @@ async function migrate(c: Client) {
     }
     await c.execute("INSERT INTO settings (key,value) VALUES ('admin_is_omar','1')");
   }
+  try { await c.execute("ALTER TABLE products ADD COLUMN flag TEXT"); } catch {}
   await loadSolucionesStock(c);
   await loadExtraStock(c);
+  await flagRepeatedImei(c);
+}
+
+// Una sola vez: marca en rojo (Stock) los equipos cuyo IMEI venía repetido en las hojas, para corregirlos a mano.
+async function flagRepeatedImei(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='flag_imei_v1'")).rows.length) return;
+  const noImei = ["1370", "1381", "1383", "1384", "1385", "1386", "1389", "1391", "1392", "1394", "1397", "1398", "1400", "1352", "1390", "1395"];
+  await c.batch([
+    { sql: `UPDATE products SET flag='IMEI repetido' WHERE status='stock' AND imei1 IS NULL AND code IN (${noImei.map(() => "?").join(",")})`, args: noImei },
+    { sql: "UPDATE products SET flag='IMEI repetido' WHERE status='stock' AND store_id=2 AND code IN ('A104','8359')", args: [] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('flag_imei_v1','1')", args: [] },
+  ], "write");
 }
 
 // RAM y almacenamiento a partir del nombre ("4+128GB", "256+8GB", "(256GB/4RAM)", "128gb"…)

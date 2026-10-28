@@ -32,6 +32,7 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     const imei2 = "imei2" in b ? clean(b.imei2) : cur.imei2;
     if ("code" in b) set("code", code);
     if ("imei1" in b) set("imei1", imei1);
+    if ("imei1" in b && imei1 && imei1 !== cur.imei1) set("flag", null); // IMEI corregido: se quita la marca roja
     if ("imei2" in b) set("imei2", imei2);
     if ("ident" in b) set("ident", clean(b.ident));
     const c = await findConflicts({ code, imeis: [imei1, imei2], excludeId: id });
