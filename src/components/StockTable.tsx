@@ -27,6 +27,8 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [kind, setKind] = useState("");
   const [status, setStatus] = useState("stock");
   const [sort, setSort] = useState("recientes");
+  const [codeQ, setCodeQ] = useState("");
+  const [letters, setLetters] = useState(false);
   const [dl, setDl] = useState(false);
   const [selling, setSelling] = useState(false);
   const [making, setMaking] = useState("");
@@ -40,17 +42,23 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [aqty, setAqty] = useState("");
   const toggle = (id: number) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
-  const load = useCallback(async () => {
-    const sp = new URLSearchParams({ status, sort });
+  const buildParams = useCallback((st: string) => {
+    const sp = new URLSearchParams({ status: st, sort });
     if (q) sp.set("q", q);
+    if (codeQ.trim()) sp.set("codeq", codeQ.trim());
+    if (letters) sp.set("letters", "1");
     if (store) sp.set("store", store);
     if (brand) sp.set("brand", brand);
     if (kind) sp.set("kind", kind);
     Object.entries(f).forEach(([k, v]) => v && sp.set(k, v));
-    const r = await api<{ products: P[] }>(`/api/products?${sp}`);
+    return sp;
+  }, [q, codeQ, letters, store, brand, kind, sort, f]);
+
+  const load = useCallback(async () => {
+    const r = await api<{ products: P[] }>(`/api/products?${buildParams(status)}`);
     setRows(r.products);
     setLoading(false);
-  }, [q, store, brand, kind, status, sort, f]);
+  }, [buildParams, status]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -81,16 +89,18 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const selStores = [...new Set(selStock.map((r) => r.store_id))];
 
   const SORT_NAMES: Record<string, string> = { recientes: "más recientes primero", antiguos: "más antiguos primero", tienda: "por tienda", marca: "marca y modelo", precio_mayor: "precio mayor a menor", precio_menor: "precio menor a mayor", codigo: "código" };
-  async function report(kind: "pdf" | "xlsx" | "csv") {
+  async function report(what: "pdf_con" | "pdf_sin" | "xlsx" | "csv") {
     setDl(false);
-    if (kind === "csv") return exportCsv();
-    setMaking(kind);
+    if (what === "csv") return exportCsv();
+    setMaking(what);
     try {
       const { downloadStockPdf, downloadStockXlsx } = await import("@/lib/stock-report");
+      const withSold = what === "pdf_con" || (what === "xlsx" && (status === "sold" || status === "all" || status === "incautado"));
+      const data = (await api<{ products: P[] }>(`/api/products?${buildParams(withSold ? "all" : "stock")}`)).products;
       const storeName = store === "" ? "" : store === "0" ? "Almacén general" : cat?.stores.find((s) => String(s.id) === store)?.name ?? "";
       const filters = [
         storeName && `Tienda: ${storeName}`,
-        `Situación: ${{ stock: "en stock", sold: "vendidos", incautado: "incautados", all: "todos" }[status] ?? status}`,
+        withSold ? "Incluye vendidos" : "Solo equipos disponibles (sin vendidos)",
         brand && `Marca: ${brand}`,
         kind_() && `Tipo: ${kind_()}`,
         q && `Búsqueda: "${q}"`,
@@ -100,15 +110,15 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         `Orden: ${SORT_NAMES[sort]}`,
       ].filter(Boolean) as string[];
       const meta = {
-        title: "Reporte de stock",
+        title: withSold ? "Reporte de stock" : "Informe de stock disponible",
         filters,
+        includeSold: withSold,
         storeColor: (id: number) => (id === 0 ? "#475569" : cat?.stores.find((s) => s.id === id)?.color ?? "#64748b"),
         brandColor: (b: string | null) => brandColor(b),
       };
-      if (kind === "pdf") await downloadStockPdf(rows, meta); else await downloadStockXlsx(rows, meta);
+      if (what === "xlsx") await downloadStockXlsx(data, meta); else await downloadStockPdf(data, meta);
     } finally { setMaking(""); }
-  }
-  const kind_ = () => (kind === "celular" ? "celulares" : kind === "accesorio" ? "accesorios" : "");
+  }  const kind_ = () => (kind === "celular" ? "celulares" : kind === "accesorio" ? "accesorios" : "");
 
   function exportCsv() {
     downloadCSV(`stock-${new Date().toISOString().slice(0, 10)}.csv`, [
@@ -133,10 +143,10 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
             </button>
             {dl && (
               <div className="anim-pop absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
-                {[["pdf", "PDF con resumen", "Listo para ver o imprimir", FileText], ["xlsx", "Excel con colores", "Resumen + hoja de stock con filtros", FileSpreadsheet], ["csv", "CSV simple", "Solo datos, sin formato", Download]].map(([k, t, d, Icon]) => {
+                {[["pdf_con", "PDF con vendidos", "Reporte completo: disponibles y vendidos", FileText], ["pdf_sin", "PDF informe sin vendidos", "Solo lo que hay disponible hoy", FileText], ["xlsx", "Excel con colores", "Resumen + hoja de stock con filtros", FileSpreadsheet], ["csv", "CSV simple", "Solo datos, sin formato", Download]].map(([k, t, d, Icon]) => {
                   const I = Icon as typeof Download;
                   return (
-                    <button key={k as string} onClick={() => report(k as "pdf" | "xlsx" | "csv")} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-blue-50">
+                    <button key={k as string} onClick={() => report(k as "pdf_con" | "pdf_sin" | "xlsx" | "csv")} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-blue-50">
                       <I className="h-5 w-5 shrink-0 text-blue-700" />
                       <span><span className="block text-sm font-bold text-slate-800">{t as string}</span><span className="block text-xs text-slate-500">{d as string}</span></span>
                     </button>
@@ -216,7 +226,17 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación"] : []), ""].map((h, i) => <th key={i} className="th">{h}</th>)}
+                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación"] : []), ""].map((h, i) => (
+                  <th key={i} className="th">
+                    {h}
+                    {h === "Cód." && (
+                      <div className="mt-1 flex items-center gap-1 font-normal normal-case">
+                        <input value={codeQ} onChange={(e) => setCodeQ(e.target.value)} placeholder="Buscar…" title="Busca una letra o número dentro del código" className="w-20 rounded-md border border-slate-200 bg-white px-1.5 py-1 text-xs outline-none focus:border-blue-500" />
+                        <button onClick={() => setLetters(!letters)} title="Mostrar solo códigos que tienen letras" className={`rounded-md border px-1.5 py-1 text-[10px] font-bold ${letters ? "border-amber-500 bg-amber-100 text-amber-800" : "border-slate-200 bg-white text-slate-500"}`}>Abc</button>
+                      </div>
+                    )}
+                  </th>
+                ))}
               </tr>
             </thead>
             <tbody>
@@ -229,7 +249,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                     return (
                       <tr key={r.id} className="hover:brightness-95" style={r.flag ? { background: "#fee2e2", outline: "2px solid #dc2626", outlineOffset: "-2px" } : { background: bc + "12" }}>
                         {role === "admin" && <td className="td" style={{ borderLeft: `5px solid ${bc}` }}><input type="checkbox" className="h-4 w-4 accent-blue-700" checked={sel.has(r.id)} onChange={() => toggle(r.id)} /></td>}
-                        <td className="td font-mono font-bold" style={role === "admin" ? undefined : { borderLeft: `5px solid ${bc}` }}>{r.code ?? "—"}</td>
+                        <td className="td font-mono font-bold" style={role === "admin" ? undefined : { borderLeft: `5px solid ${bc}` }}>{role === "admin" ? <CodeCell id={r.id} code={r.code} warn={/[A-Za-z]/.test(r.code ?? "")} onSaved={load} /> : (r.code ?? "—")}</td>
                         <td className="td"><span className="rounded-full px-2 py-0.5 text-[11px] font-bold text-white" style={{ background: cat?.stores.find((s) => s.id === r.store_id)?.color ?? "#64748b" }}>{r.store_name}</span></td>
                         <td className="td font-bold" style={{ color: bc }}>{r.brand ?? "—"}</td>
                         <td className="td font-semibold">{r.model}{r.is_test ? <span className="ml-1.5 rounded bg-amber-100 px-1.5 text-[10px] font-bold text-amber-700">PRUEBA</span> : null}{r.kind === "accesorio" && r.qty > 1 ? <span className="ml-1 text-xs text-slate-500">×{r.qty}</span> : null}</td>
@@ -265,6 +285,36 @@ function GroupRows({ title, color, count, show, children }: { title: string; col
       {show && <tr><td colSpan={16} className="border-b border-slate-200 px-3 py-1.5 text-xs font-extrabold uppercase tracking-wide text-white" style={{ background: color }}>{title} · {count}</td></tr>}
       {children}
     </>
+  );
+}
+
+/** Código editable en la misma fila: clic, escribir, Enter para guardar (Esc cancela). Las letras se marcan en ámbar. */
+function CodeCell({ id, code, warn, onSaved }: { id: number; code: string | null; warn: boolean; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(code ?? "");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    const nv = v.trim();
+    if (nv === (code ?? "")) { setEditing(false); setErr(""); return; }
+    setBusy(true);
+    try {
+      await api(`/api/products/${id}`, { method: "PATCH", body: { code: nv } });
+      setEditing(false); setErr(""); onSaved();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  if (!editing)
+    return (
+      <button onClick={() => { setV(code ?? ""); setEditing(true); }} title="Clic para editar el código"
+        className={`rounded-md px-1.5 py-0.5 text-left hover:bg-white hover:ring-1 hover:ring-blue-300 ${warn ? "bg-amber-100 text-amber-800" : ""}`}>{code ?? "—"}</button>
+    );
+  return (
+    <div className="w-32">
+      <input autoFocus disabled={busy} value={v} onChange={(e) => setV(e.target.value)} onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
+        className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 font-mono text-sm outline-none" />
+      {err && <div className="mt-0.5 whitespace-normal text-[10px] font-semibold leading-tight text-rose-600">{err}</div>}
+    </div>
   );
 }
 

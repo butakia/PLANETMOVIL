@@ -1,4 +1,4 @@
-// Reporte de stock descargable: PDF y Excel con el mismo estilo de la web (colores por tienda y marca, resumen arriba).
+﻿// Reporte de stock descargable: PDF y Excel con el mismo estilo de la web (colores por tienda y marca, resumen arriba).
 import { fmtDay, soles, storageLabel } from "./format";
 
 export type ReportRow = {
@@ -11,7 +11,11 @@ export type ReportMeta = {
   filters: string[];
   storeColor: (id: number) => string;
   brandColor: (brand: string | null) => string;
+  /** false = informe solo con lo disponible (sin vendidos). Los incautados nunca salen en el reporte. */
+  includeSold?: boolean;
 };
+
+const forReport = (rows: ReportRow[], meta: ReportMeta) => rows.filter((r) => r.status !== "incautado" && (meta.includeSold !== false || r.status !== "sold"));
 
 const NAVY = "#1e3a8a";
 const statusLabel = (s: string) => (s === "stock" ? "En stock" : s === "incautado" ? "Incautado" : "Vendido");
@@ -41,7 +45,7 @@ function summarize(rows: ReportRow[], meta: ReportMeta) {
     const b = r.brand ?? "Otros";
     brands.set(b, (brands.get(b) ?? 0) + 1);
   }
-  const byStatus = ["stock", "sold", "incautado"].map((k) => [statusLabel(k), rows.filter((r) => r.status === k).length] as const);
+  const byStatus = ["stock", "sold"].map((k) => [statusLabel(k), rows.filter((r) => r.status === k).length] as const);
   return {
     units, value, noPrice, total: rows.length, byStatus,
     stores: [...stores.entries()].sort((a, b) => a[0] - b[0]).map(([id, s]) => ({ id, ...s, color: meta.storeColor(id) })),
@@ -49,6 +53,7 @@ function summarize(rows: ReportRow[], meta: ReportMeta) {
   };
 }
 
+/* Nota: el nombre del archivo del PDF distingue el informe sin vendidos. */
 function save(blob: Blob, name: string) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -59,7 +64,8 @@ function save(blob: Blob, name: string) {
 }
 
 /* ───────────── PDF ───────────── */
-export async function downloadStockPdf(rows: ReportRow[], meta: ReportMeta) {
+export async function downloadStockPdf(allRows: ReportRow[], meta: ReportMeta) {
+  const rows = forReport(allRows, meta);
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("jspdf"), import("jspdf-autotable")]);
   const doc = new jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
   const W = doc.internal.pageSize.getWidth();
@@ -83,7 +89,7 @@ export async function downloadStockPdf(rows: ReportRow[], meta: ReportMeta) {
     ["Unidades en stock", String(sm.units), NAVY],
     ["Valor a precio sugerido", soles(sm.value), "#059669"],
     ["Sin precio sugerido", String(sm.noPrice), "#d97706"],
-    ["Vendidos / incautados", `${sm.byStatus[1][1]} / ${sm.byStatus[2][1]}`, "#475569"],
+    meta.includeSold === false ? ["Marcas distintas", String(sm.brands.length), "#475569"] : ["Vendidos", String(sm.byStatus[1][1]), "#475569"],
   ];
   const cw = (W - 2 * M - 3 * 4) / 4;
   cards.forEach(([label, value, color], i) => {
@@ -173,11 +179,12 @@ export async function downloadStockPdf(rows: ReportRow[], meta: ReportMeta) {
     doc.text(`${meta.title}  ·  ${nowLabel()}`, M, H - 4.5);
     doc.text(`Página ${i} de ${pages}`, W - M, H - 4.5, { align: "right" });
   }
-  doc.save(`stock-${fileStamp()}.pdf`);
+  doc.save(meta.includeSold === false ? `informe-stock-sin-vendidos-${fileStamp()}.pdf` : `reporte-stock-con-vendidos-${fileStamp()}.pdf`);
 }
 
 /* ───────────── Excel ───────────── */
-export async function downloadStockXlsx(rows: ReportRow[], meta: ReportMeta) {
+export async function downloadStockXlsx(allRows: ReportRow[], meta: ReportMeta) {
+  const rows = forReport(allRows, meta);
   const ExcelJS = (await import("exceljs")).default;
   const wb = new ExcelJS.Workbook();
   wb.creator = "Planet Movil";
@@ -205,7 +212,7 @@ export async function downloadStockXlsx(rows: ReportRow[], meta: ReportMeta) {
     ["Unidades en stock", sm.units, "#1e3a8a"],
     ["Valor a precio sugerido", sm.value, "#059669", '"S/" #,##0.00'],
     ["Sin precio sugerido", sm.noPrice, "#d97706"],
-    ["Vendidos", sm.byStatus[1][1], "#475569"],
+    meta.includeSold === false ? ["Marcas distintas", sm.brands.length, "#475569"] : ["Vendidos", sm.byStatus[1][1], "#475569"],
   ];
   kpis.forEach(([label, value, color, fmt], i) => {
     const col = ["A", "B", "C", "D"][i];
