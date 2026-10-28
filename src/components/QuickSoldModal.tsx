@@ -22,6 +22,7 @@ export default function QuickSoldModal({ stores, onClose, onDone }: { stores: { 
   const [date, setDate] = useState(limaToday());
   const [more, setMore] = useState(false);
   const [seller, setSeller] = useState("");
+  const [sellerName, setSellerName] = useState("");
   const [price, setPrice] = useState("");
   const [method, setMethod] = useState("Efectivo");
   const [sellers, setSellers] = useState<Seller[]>([]);
@@ -39,7 +40,7 @@ export default function QuickSoldModal({ stores, onClose, onDone }: { stores: { 
     if (!store) return setErr("Elige la tienda donde se vendió");
     setBusy(true); setErr("");
     try {
-      setRes(await api("/api/products/sold", { body: { items, store_id: Number(store), date, seller_id: seller || undefined, price: price || undefined, method } }));
+      setRes(await api("/api/products/sold", { body: { items, store_id: Number(store), date, seller_id: seller || undefined, seller_name: seller ? undefined : sellerName, price: price || undefined, method } }));
     } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
   }
 
@@ -84,7 +85,8 @@ export default function QuickSoldModal({ stores, onClose, onDone }: { stores: { 
             <button onClick={() => setMore(!more)} className="mt-3 text-sm font-bold text-blue-700">{more ? "− Ocultar" : "+ Vendedora y precio (opcional)"}</button>
             {more && (
               <div className="anim-pop mt-2 grid gap-3 sm:grid-cols-3">
-                <div><label className="label">Vendedora</label><select className="input" value={seller} onChange={(e) => setSeller(e.target.value)}><option value="">Sin especificar</option>{sellers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
+                <div><label className="label">Vendedora</label><select className="input" value={seller} onChange={(e) => setSeller(e.target.value)}><option value="">Escribir nombre…</option>{sellers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
+                  {!seller && <input className="input mt-1.5" placeholder="Ej. Yuli" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />}</div>
                 <div><label className="label">Precio por equipo (S/)</label><input inputMode="decimal" className="input" placeholder="Vacío = sin venta" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} /></div>
                 <div><label className="label">Medio de pago</label><select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
               </div>

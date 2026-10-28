@@ -45,7 +45,8 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const toggle = (id: number) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const buildParams = useCallback((st: string) => {
-    const sp = new URLSearchParams({ status: st, sort });
+    const sp = new URLSearchParams({ status: st === "rapido" ? "all" : st, sort });
+    if (st === "rapido") sp.set("src", "rapido");
     if (q) sp.set("q", q);
     if (codeQ.trim()) sp.set("codeq", codeQ.trim());
     if (letters) sp.set("letters", "1");
@@ -97,7 +98,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     setMaking(what);
     try {
       const { downloadStockPdf, downloadStockXlsx } = await import("@/lib/stock-report");
-      const withSold = what === "pdf_con" || (what === "xlsx" && (status === "sold" || status === "all" || status === "incautado"));
+      const withSold = what === "pdf_con" || (what === "xlsx" && (status === "sold" || status === "all" || status === "incautado" || status === "rapido"));
       const data = (await api<{ products: P[] }>(`/api/products?${buildParams(withSold ? "all" : "stock")}`)).products;
       const storeName = store === "" ? "" : store === "0" ? "Almacén general" : cat?.stores.find((s) => String(s.id) === store)?.name ?? "";
       const filters = [
@@ -169,7 +170,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
       </div>
 
       <div className="flex gap-1.5 overflow-x-auto">
-        {[["stock", "En stock"], ["sold", "Vendidos"], ["incautado", "Incautados"], ["all", "Todos"]].map(([id, name]) => (
+        {[["stock", "En stock"], ["sold", "Vendidos"], ["incautado", "Incautados"], ["rapido", "Subidos aparte"], ["all", "Todos"]].map(([id, name]) => (
           <button key={id} onClick={() => setStatus(id)} className={`chip whitespace-nowrap ${status === id ? "chip-on" : ""}`}>{name}</button>
         ))}
       </div>

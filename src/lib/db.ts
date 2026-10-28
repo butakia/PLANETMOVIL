@@ -111,6 +111,7 @@ async function migrate(c: Client) {
     await c.execute("INSERT INTO settings (key,value) VALUES ('admin_is_omar','1')");
   }
   try { await c.execute("ALTER TABLE products ADD COLUMN flag TEXT"); } catch {}
+  try { await c.execute("ALTER TABLE products ADD COLUMN src TEXT"); } catch {}
   await loadSolucionesStock(c);
   await loadExtraStock(c);
   await flagRepeatedImei(c);
@@ -119,6 +120,21 @@ async function migrate(c: Client) {
   await cleanStockV4(c);
   await createAndres(c);
   await purgeTestSales(c, "2026-10-28");
+  await loadManualSold(c);
+}
+
+// Una sola vez: vendido el domingo 25/10/2026 que no estaba en el stock (pestaña "Subidos aparte").
+async function loadManualSold(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='manual_sold_v1'")).rows.length) return;
+  const imei = "352341391817949";
+  const note = "Vendido el 25/10/2026 · Vendedora: Yuli";
+  const ex = (await c.execute({ sql: "SELECT id FROM products WHERE imei1=? OR imei2=? LIMIT 1", args: [imei, imei] })).rows[0];
+  await c.batch([
+    ex
+      ? { sql: "UPDATE products SET qty=0, status='sold', src='rapido', notes=? WHERE id=?", args: [note, Number(ex.id)] }
+      : { sql: "INSERT INTO products (kind,store_id,brand,model,imei1,ram,storage,qty,status,src,notes,entry_date,created_by) VALUES ('celular',1,'Samsung','Samsung A57 5G',?,4,256,0,'sold','rapido',?,'2026-10-25','Omar')", args: [imei, note] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('manual_sold_v1','1')", args: [] },
+  ], "write");
 }
 
 // Una sola vez: Andres, vendedor fijo de Red i Mobile (tienda 3).

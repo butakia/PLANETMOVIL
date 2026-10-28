@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
     if (b.seller_id) {
       const u = (await tx.execute({ sql: "SELECT id,name FROM users WHERE id=?", args: [Number(b.seller_id)] })).rows[0];
       if (u) { sellerId = Number(u.id); sellerName = String(u.name); }
-    }
+    } else if (clean(b.seller_name)) sellerName = clean(b.seller_name)!;
+    const named = !!b.seller_id || !!clean(b.seller_name);
     const st = (await tx.execute({ sql: "SELECT series,name FROM stores WHERE id=?", args: [storeId] })).rows[0];
     let seq = Number((await tx.execute({ sql: "SELECT COALESCE(MAX(seq),0) AS n FROM sales WHERE store_id=?", args: [storeId] })).rows[0].n);
     const [yy, mm, dd] = day.split("-");
@@ -47,7 +48,7 @@ export async function POST(req: NextRequest) {
         }
       }
       const ins = await tx.execute({
-        sql: "INSERT INTO products (kind,store_id,brand,model,imei1,color,qty,status,entry_date,created_by) VALUES ('celular',?,?,?,?,?,1,'stock',?,?)",
+        sql: "INSERT INTO products (kind,store_id,brand,model,imei1,color,qty,status,entry_date,created_by,src) VALUES ('celular',?,?,?,?,?,1,'stock',?,?,'rapido')",
         args: [storeId, model.split(" ")[0], model, imei, clean(it.color), day, g.user.name],
       });
       ids.push(Number(ins.lastInsertRowid));
@@ -57,7 +58,7 @@ export async function POST(req: NextRequest) {
       const p = (await tx.execute({ sql: "SELECT * FROM products WHERE id=?", args: [id] })).rows[0];
       if (!p || p.status !== "stock") { skipped.push(p ? String(p.model) : `#${id}`); continue; }
       const qty = Number(p.qty) || 1;
-      const note = `Vendido el ${dd}/${mm}/${yy} en ${st.name}${b.seller_id ? ` por ${sellerName}` : ""}${price ? ` · S/ ${price.toFixed(2)}` : ""}`;
+      const note = `Vendido el ${dd}/${mm}/${yy} en ${st.name}${named ? ` · Vendedora: ${sellerName}` : ""}${price ? ` · S/ ${price.toFixed(2)}` : ""}`;
       await tx.execute({ sql: "UPDATE products SET qty=0, status='sold', store_id=?, notes=? WHERE id=?", args: [storeId, [p.notes, note].filter(Boolean).join(" | "), id] });
       done++;
       if (price) {
