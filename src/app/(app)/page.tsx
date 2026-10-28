@@ -45,7 +45,7 @@ export default async function Home() {
 
   return (
     <div className="space-y-5">
-      <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">{u.role === "admin" ? "Hola, administrador" : `Hola, ${u.name}`}</h1>
+      <div><h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Hola, {u.name}</h1>
         <p className="text-slate-500">Así van hoy las dos tiendas.</p></div>
       {tiles.length > 0 && (
         <div className="stagger grid grid-cols-2 gap-3 lg:grid-cols-4">

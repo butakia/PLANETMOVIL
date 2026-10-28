@@ -154,6 +154,29 @@ export const CATALOG: CatalogItem[] = RAW.trim()
     return { brand, model: `${brand} ${model}`, ram: +ram, storage: +storage, type };
   });
 
+// Accesorios más vendidos. `brand: true` = depende del modelo/marca del celular (se pide aparte).
+export const ACCESSORY_CATALOG: { name: string; brand: boolean }[] = [
+  { name: "Cargador de pared", brand: true }, { name: "Cargador rápido tipo C", brand: true }, { name: "Cargador turbo", brand: true },
+  { name: "Cargador iPhone", brand: false }, { name: "Cargador de auto", brand: true }, { name: "Cargador inalámbrico", brand: true },
+  { name: "Cargador portátil (power bank)", brand: true },
+  { name: "Cable USB", brand: true }, { name: "Cable USB V8 (micro USB)", brand: true }, { name: "Cable tipo C", brand: true },
+  { name: "Cable tipo C a tipo C", brand: true }, { name: "Cable iPhone (Lightning)", brand: false }, { name: "Cable de datos", brand: true },
+  { name: "Funda / Case", brand: true }, { name: "Funda de silicona", brand: true }, { name: "Funda antigolpes", brand: true },
+  { name: "Funda tipo billetera", brand: true }, { name: "Funda transparente", brand: true },
+  { name: "Vidrio templado", brand: true }, { name: "Vidrio templado 9D", brand: true }, { name: "Vidrio de privacidad", brand: true },
+  { name: "Mica hidrogel", brand: true }, { name: "Protector de cámara", brand: true },
+  { name: "Audífonos con cable", brand: true }, { name: "Audífonos Bluetooth", brand: true }, { name: "Audífonos inalámbricos (TWS)", brand: true },
+  { name: "Audífonos de diadema", brand: false }, { name: "Parlante Bluetooth", brand: true },
+  { name: "Memoria microSD", brand: true }, { name: "Adaptador OTG", brand: false }, { name: "Adaptador de audio", brand: false },
+  { name: "Soporte para celular", brand: false }, { name: "Soporte de auto", brand: false }, { name: "Anillo / popsocket", brand: false },
+  { name: "Batería", brand: true }, { name: "Smartwatch", brand: true }, { name: "Correa de reloj", brand: true },
+  { name: "Lápiz táctil", brand: false }, { name: "Aro de luz", brand: false }, { name: "Trípode", brand: false },
+  { name: "Extractor de SIM", brand: false }, { name: "Chip", brand: false },
+];
+
+// Marcas que se sugieren al escribir ("ca" → Cargador Samsung, Cargador Xiaomi…)
+export const ACCESSORY_BRANDS = ["Samsung", "Xiaomi", "Motorola", "Huawei", "Oppo", "Honor", "Realme", "Vivo", "iPhone", "Infinix", "Tecno", "ZTE", "Genérico"];
+
 export const ACCESSORY_TYPES = [
   "Cargador USB", "Cargador tipo C", "Cargador de auto", "Cable USB", "Cable tipo C", "Cable iPhone",
   "Audífonos con cable", "Audífonos inalámbricos", "Audífonos Bluetooth", "Parlante Bluetooth", "Power bank",

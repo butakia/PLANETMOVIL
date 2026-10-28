@@ -2,11 +2,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ArrowLeftRight, Camera, Clock, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, Camera, ChevronRight, Clock, Headphones, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart, Smartphone } from "lucide-react";
 import { api } from "@/lib/client";
 import { limaToday, METHODS, soles, specLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import BarcodeScanner from "./BarcodeScanner";
+import NumPad from "./NumPad";
+import AccessoryPicker, { type Accessory } from "./AccessoryPicker";
 
 type P = {
   id: number; kind: "celular" | "accesorio"; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -19,6 +21,8 @@ const boxLabel = (c?: string | null) => (!c ? "—" : c.toLowerCase().startsWith
 export default function SaleForm({ user, late = false }: { user: { role: string; store_id: number | null; name: string }; late?: boolean }) {
   const router = useRouter();
   const { cat, brandColor } = useCatalog();
+  const [mode, setMode] = useState<null | "celular" | "accesorio">(null);
+  const [acc, setAcc] = useState<Accessory | null>(null);
   const [code, setCode] = useState("");
   const [matches, setMatches] = useState<P[]>([]);
   const [p, setP] = useState<P | null>(null);
@@ -83,14 +87,24 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
     setAmt({ [m]: v, [other]: rest > 0 ? String(rest) : "0" });
   }
   const remaining = Math.round((total - paid) * 100) / 100;
-  const hasItem = !!p || manual;
+  const hasItem = !!p || manual || !!acc;
+  const isAcc = !!acc || p?.kind === "accesorio";
+  const itemName = acc ? [acc.name, acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
+
+  function chooseMode(m: "celular" | "accesorio") {
+    setMode(m); setErr("");
+  }
+  function backToChoice() {
+    setMode(null); setAcc(null); setP(null); setManual(false); setMatches([]); setSearched(false); setCode("");
+    setPrice(""); setQty(1); setErr(""); setEditing(false); resetPay();
+  }
 
   const changes = useMemo(() => {
     if (!p) return [] as string[];
     return EDIT_KEYS.filter((k) => (fields[k] ?? "") !== String((p as unknown as Record<string, unknown>)[k] ?? ""));
   }, [p, fields]);
 
-  useEffect(() => { codeRef.current?.focus(); }, []);
+  useEffect(() => { if (mode === "celular") codeRef.current?.focus(); }, [mode]);
   const store = cat?.stores.find((s) => s.id === (p?.store_id ?? mStore));
 
   async function transfer() {
@@ -101,6 +115,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
 
   function review() {
     setErr("");
+    if (mode === "accesorio" && !acc?.name) return setErr("Elige el accesorio");
     if (manual && !fields.model?.trim()) return setErr("Escribe el modelo del equipo");
     if (late && !saleDate) return setErr("Indica la fecha en que se hizo la venta");
     if (!(total > 0)) return setErr("Ingresa el monto de la venta");
@@ -117,6 +132,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
         body: {
           product_id: p?.id, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
           manual: manual ? { ...fields, store_id: mStore } : undefined,
+          accessory: acc ? { name: acc.name, detail: acc.detail.trim(), store_id: mStore } : undefined,
           payments: payList,
         },
       });
@@ -148,16 +164,53 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
         </div>
       )}
 
+      {mode === null && (
+        <div className="anim-pop">
+          <p className="mb-3 text-center text-sm font-semibold text-slate-500">¿Qué vas a vender?</p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            {([
+              { m: "celular", label: "Celulares", sub: "Por código interno o IMEI", icon: Smartphone, c: "from-blue-900 to-sky-600" },
+              { m: "accesorio", label: "Accesorios", sub: "Cargadores, cables, fundas, vidrios…", icon: Headphones, c: "from-emerald-700 to-teal-500" },
+            ] as const).map(({ m, label, sub, icon: I, c }) => (
+              <button key={m} type="button" onClick={() => chooseMode(m)}
+                className={`lift group flex min-h-44 flex-col items-center justify-center gap-3 rounded-3xl bg-gradient-to-br ${c} p-6 text-center text-white shadow-lg active:scale-[0.98]`}>
+                <span className="rounded-2xl bg-white/20 p-4 transition group-hover:bg-white/30"><I className="h-12 w-12" /></span>
+                <span className="text-2xl font-extrabold">{label}</span>
+                <span className="flex items-center gap-1 text-sm font-medium opacity-90">{sub} <ChevronRight className="h-4 w-4" /></span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {mode !== null && !hasItem && (
+        <button type="button" onClick={backToChoice} className="btn-ghost !py-1.5 text-xs"><ArrowLeft className="h-3.5 w-3.5" /> Cambiar (celulares / accesorios)</button>
+      )}
+
+      {/* 1b. Accesorio */}
+      {mode === "accesorio" && (
+        <div className="card p-4 sm:p-5">
+          <label className="label">1 · Accesorio</label>
+          <AccessoryPicker value={acc} onChange={setAcc} models={cat?.models.map((m) => m.name) ?? []} />
+          {acc && user.role === "admin" && cat && (
+            <div className="mt-3"><label className="label">Tienda</label>
+              <select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
+          )}
+          {acc && <button type="button" onClick={backToChoice} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">← Cambiar (celulares / accesorios)</button>}
+        </div>
+      )}
+
       {/* 1. Equipo */}
+      {mode === "celular" && (
       <div className="card p-4 sm:p-5">
-        <label className="label">1 · Equipo (código interno o IMEI)</label>
+        <label className="label">1 · Celular (código interno o IMEI)</label>
         <div className="flex gap-2">
           <div className="relative flex-1">
             <Search className="absolute left-3.5 top-1/2 h-5 w-5 -translate-y-1/2 text-slate-300" />
-            <input ref={codeRef} className="input !py-3.5 pl-11 font-mono text-xl" placeholder="Ej. 512" value={code}
-              onChange={(e) => { setCode(e.target.value); setSearched(false); }} onKeyDown={(e) => e.key === "Enter" && search()} />
+            <input ref={codeRef} className="input !py-3.5 pl-11 font-mono text-2xl tracking-wider" placeholder="Ej. 512" value={code}
+              inputMode="none" autoComplete="off" enterKeyHint="search"
+              onChange={(e) => { setCode(e.target.value.replace(/\D/g, "")); setSearched(false); }} onKeyDown={(e) => e.key === "Enter" && search()} />
           </div>
-          <button onClick={() => search()} className="btn-primary px-6">Buscar</button>
           <button onClick={() => setCam(true)} className="btn-soft" title="Escanear con la cámara"><Camera className="h-5 w-5" /></button>
         </div>
         {searched && !p && matches.length === 0 && (
@@ -175,14 +228,16 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             ))}
           </ul>
         )}
+        {!hasItem && <NumPad value={code} onChange={(v) => { setCode(v); setSearched(false); }} onEnter={() => search()} />}
         {!hasItem && !searched && (
           <button onClick={startManual} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">¿No tiene código? Ingresar el equipo manualmente</button>
         )}
       </div>
+      )}
 
       {hasItem && (
         <>
-          <div className="card anim-pop overflow-hidden">
+          {(p || manual) && <div className="card anim-pop overflow-hidden">
             <div className="flex items-center justify-between gap-2 px-4 py-3 text-white" style={{ background: bc }}>
               <div className="min-w-0">
                 <div className="text-[11px] font-bold uppercase opacity-80">{manual ? "Equipo manual · no está en stock" : `${p?.brand ?? "Equipo"} · Cód. ${p?.code ?? "—"}`}</div>
@@ -233,7 +288,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
               )}
               {manual && <p className="mt-3 text-xs text-slate-500">Este equipo no se descuenta del stock porque no está registrado. El administrador recibirá un aviso.</p>}
             </div>
-          </div>
+          </div>}
 
           {/* 2. Cobro */}
           <div className="card anim-pop space-y-4 p-4 sm:p-5">
@@ -244,9 +299,9 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
                 <input type="number" inputMode="decimal" className="input !py-3.5 text-2xl font-extrabold" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
                 {p?.price_suggested ? <button onClick={() => setPrice(String(p.price_suggested))} className="mt-1 text-xs font-semibold text-brand-600">Precio sugerido: {soles(p.price_suggested)}</button> : null}
               </div>
-              {p?.kind === "accesorio" && p.qty > 1 && (
-                <div><label className="label">Cantidad (hay {p.qty})</label>
-                  <div className="flex items-center gap-2"><button className="btn-ghost !px-3" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></button><span className="w-10 text-center text-xl font-bold">{qty}</span><button className="btn-ghost !px-3" onClick={() => setQty(Math.min(p.qty, qty + 1))}><Plus className="h-4 w-4" /></button></div></div>
+              {((p?.kind === "accesorio" && p.qty > 1) || acc) && (
+                <div><label className="label">Cantidad{p ? ` (hay ${p.qty})` : ""}</label>
+                  <div className="flex items-center gap-2"><button className="btn-ghost !px-3" onClick={() => setQty(Math.max(1, qty - 1))}><Minus className="h-4 w-4" /></button><span className="w-10 text-center text-xl font-bold">{qty}</span><button className="btn-ghost !px-3" onClick={() => setQty(p ? Math.min(p.qty, qty + 1) : Math.min(99, qty + 1))}><Plus className="h-4 w-4" /></button></div></div>
               )}
             </div>
             <div>
@@ -303,10 +358,10 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             <p className="text-sm text-slate-500">{late ? "Quedará pendiente hasta que el administrador la apruebe." : "Revisa los datos antes de registrar. Después no se puede editar."}</p>
             <div className="mt-4 space-y-3 rounded-2xl bg-slate-50 p-4 text-sm">
               {late && <div className="font-semibold text-amber-800">Fecha de la venta: {saleDate.split("-").reverse().join("/")}</div>}
-              <div><div className="text-lg font-extrabold">{fields.model}</div>
-                <div className="text-slate-600">{[specLabel(Number(fields.ram) || null, Number(fields.storage) || null), fields.color, p?.kind !== "accesorio" ? boxLabel(fields.condition) : ""].filter((x) => x && x !== "—").join(" · ")}</div></div>
-              {(p?.kind !== "accesorio") ? <div className="font-mono text-xs text-slate-600">IMEI 1: {fields.imei1 || "—"}{fields.imei2 ? <><br />IMEI 2: {fields.imei2}</> : null}</div> : p?.ident ? <div className="font-mono text-xs text-slate-600">Cód.: {p.ident}</div> : null}
-              <div className="text-xs text-slate-500">{manual ? `Equipo no registrado en stock${fields.code ? ` · cód. ${fields.code}` : ""}` : `Cód. interno ${p?.code ?? "—"}`} · {store?.name}{p?.kind === "accesorio" && qty > 1 ? ` · ${qty} unidades` : ""}</div>
+              <div><div className="text-lg font-extrabold">{itemName}</div>
+                {!acc && <div className="text-slate-600">{[specLabel(Number(fields.ram) || null, Number(fields.storage) || null), fields.color, !isAcc ? boxLabel(fields.condition) : ""].filter((x) => x && x !== "—").join(" · ")}</div>}</div>
+              {acc ? null : (!isAcc) ?<div className="font-mono text-xs text-slate-600">IMEI 1: {fields.imei1 || "—"}{fields.imei2 ? <><br />IMEI 2: {fields.imei2}</> : null}</div> : p?.ident ? <div className="font-mono text-xs text-slate-600">Cód.: {p.ident}</div> : null}
+              <div className="text-xs text-slate-500">{acc ? "Accesorio" : manual ? `Equipo no registrado en stock${fields.code ? ` · cód. ${fields.code}` : ""}` : `Cód. interno ${p?.code ?? "—"}`} · {store?.name}{isAcc && qty > 1 ? ` · ${qty} unidades` : ""}</div>
               <hr className="border-slate-200" />
               <div className="flex items-end justify-between"><span className="font-semibold">Total a cobrar</span><span className="text-2xl font-extrabold">{soles(total)}</span></div>
               <div className="text-slate-600">{payList.map((x, i) => <div key={i} className="flex justify-between"><span>{x.method}</span><span>{soles(x.amount)}</span></div>)}</div>
