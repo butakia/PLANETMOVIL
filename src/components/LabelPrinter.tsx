@@ -10,11 +10,54 @@ type P = { id: number; kind: string; model: string; brand: string | null; code: 
 type Mode = "qr" | "bar";
 
 const SIZES: Record<string, { label: string; w: number; h: number; sheet?: boolean }> = {
+  "58x40": { label: "NES D58 · 58 × 40 mm (rollo)", w: 58, h: 40 },
+  "58x30": { label: "NES D58 · 58 × 30 mm (rollo)", w: 58, h: 30 },
+  "58x25": { label: "NES D58 · 58 × 25 mm (rollo)", w: 58, h: 25 },
+  "40x30": { label: "Etiqueta 40 × 30 mm (rollo)", w: 40, h: 30 },
   "50x30": { label: "Etiqueta 50 × 30 mm (rollo)", w: 50, h: 30 },
   "40x25": { label: "Etiqueta 40 × 25 mm (rollo)", w: 40, h: 25 },
   "70x40": { label: "Etiqueta 70 × 40 mm (rollo)", w: 70, h: 40 },
   a4: { label: "Hoja A4 (varias por hoja)", w: 63, h: 38, sheet: true },
 };
+
+const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** Imprime solo las etiquetas (iframe aparte) con el tamaño exacto del papel: una página por etiqueta, sin hojas en blanco. */
+async function printLabels(o: { value: string; name: string; mode: Mode; copies: number; w: number; h: number; sheet?: boolean; price: string; codeH: number }) {
+  let codeHtml = "";
+  if (o.mode === "qr") {
+    const url = await QRCode.toDataURL(o.value, { margin: 0, width: 400, errorCorrectionLevel: "M" });
+    codeHtml = `<img src="${url}" style="width:${o.codeH}mm;height:${o.codeH}mm;flex:none">`;
+  } else {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    JsBarcode(svg, o.value, { format: "CODE128", displayValue: true, height: 40, margin: 0, fontSize: 14 });
+    svg.setAttribute("style", `max-height:${o.codeH}mm;width:100%`);
+    codeHtml = svg.outerHTML;
+  }
+  const one = `<div class="l">${codeHtml}<div class="t"><div class="n">${esc(o.name || "—")}</div>${o.mode === "qr" ? `<div class="c">${esc(o.value)}</div>` : ""}${o.price ? `<div class="p">${esc(o.price)}</div>` : ""}</div></div>`;
+  const css = `@page{size:${o.sheet ? "A4" : `${o.w}mm ${o.h}mm`};margin:${o.sheet ? "8mm" : "0"}}
+html,body{margin:0;padding:0;background:#fff;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+body{font-family:Arial,Helvetica,sans-serif;color:#000;${o.sheet ? "display:flex;flex-wrap:wrap;gap:2mm" : ""}}
+.l{box-sizing:border-box;width:${o.w}mm;height:${o.h}mm;padding:1.5mm 2mm;overflow:hidden;display:flex;align-items:center;gap:2mm;${o.sheet ? "" : "break-after:page;page-break-after:always;"}}
+.l:last-child{break-after:auto;page-break-after:auto}
+.t{min-width:0;flex:1;line-height:1.15}
+.n{font-size:8pt;font-weight:800;text-transform:uppercase;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.c{font:6pt monospace;word-break:break-all;margin-top:.5mm}
+.p{font-size:9pt;font-weight:800;margin-top:.5mm}`;
+  const frame = document.createElement("iframe");
+  frame.style.cssText = "position:fixed;right:0;bottom:0;width:0;height:0;border:0;visibility:hidden";
+  document.body.appendChild(frame);
+  const d = frame.contentDocument!;
+  d.open();
+  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>Etiquetas</title><style>${css}</style></head><body>${one.repeat(o.copies)}</body></html>`);
+  d.close();
+  await new Promise((r) => setTimeout(r, 300));
+  const done = () => setTimeout(() => frame.remove(), 1000);
+  frame.contentWindow!.addEventListener("afterprint", done);
+  frame.contentWindow!.focus();
+  frame.contentWindow!.print();
+  setTimeout(done, 60000);
+}
 
 function LabelCode({ value, mode, h }: { value: string; mode: Mode; h: number }) {
   const [src, setSrc] = useState("");
@@ -40,8 +83,11 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
   const [title, setTitle] = useState("");
   const [mode, setMode] = useState<Mode>("qr");
   const [copies, setCopies] = useState(1);
-  const [size, setSize] = useState("50x30");
+  const [size, setSize] = useState("58x40");
   const [showPrice, setShowPrice] = useState(false);
+  const [printing, setPrinting] = useState(false);
+  useEffect(() => { try { const s = localStorage.getItem("pm_label_size"); if (s && SIZES[s]) setSize(s); } catch { /* sin almacenamiento */ } }, []);
+  const chooseSize = (s: string) => { setSize(s); try { localStorage.setItem("pm_label_size", s); } catch { /* sin almacenamiento */ } };
 
   useEffect(() => {
     const t = setTimeout(async () => {
@@ -97,11 +143,14 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
             <button onClick={() => setMode("qr")} className={`chip flex-1 ${mode === "qr" ? "chip-on" : ""}`}><QrCode className="h-4 w-4" /> Código QR</button>
             <button onClick={() => setMode("bar")} className={`chip flex-1 ${mode === "bar" ? "chip-on" : ""}`}><Barcode className="h-4 w-4" /> Código de barras</button>
           </div>
-          <div><label className="label">Tamaño</label><select className="input" value={size} onChange={(e) => setSize(e.target.value)}>{Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+          <div><label className="label">Tamaño</label><select className="input" value={size} onChange={(e) => chooseSize(e.target.value)}>{Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
           <div><label className="label">Cantidad de etiquetas</label><input type="number" min={1} max={200} className="input" value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} /></div>
           <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} /> Mostrar precio sugerido</label>
-          <button disabled={!value} onClick={() => window.print()} className="btn-primary w-full py-3"><Printer className="h-5 w-5" /> Imprimir {copies} etiqueta{copies > 1 ? "s" : ""}</button>
-          <p className="text-xs text-slate-400">En el cuadro de impresión elige tu impresora de etiquetas o la impresora normal. Para rollos, el papel se ajusta solo al tamaño elegido.</p>
+          <button disabled={!value || printing} onClick={async () => {
+            setPrinting(true);
+            try { await printLabels({ value, name, mode, copies, w: S.w, h: S.h, sheet: S.sheet, price: showPrice && sel?.price_suggested ? soles(sel.price_suggested) : "", codeH }); } finally { setPrinting(false); }
+          }} className="btn-primary w-full py-3"><Printer className="h-5 w-5" /> Imprimir {copies} etiqueta{copies > 1 ? "s" : ""}</button>
+          <p className="text-xs text-slate-400">Se imprime solo la etiqueta, una por página, con el tamaño exacto elegido. En el cuadro de impresión elige <b>NES D58</b> y deja los márgenes en “Ninguno” y la escala en 100 %.</p>
         </div>
       </div>
 
