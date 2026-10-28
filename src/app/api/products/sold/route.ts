@@ -10,8 +10,10 @@ export async function POST(req: NextRequest) {
   if (g.error) return g.error;
   const b = await req.json();
   const ids = (Array.isArray(b.ids) ? b.ids : []).map(Number).filter(Boolean) as number[];
+  // Registro rápido: equipos que no están en el stock (solo modelo e IMEI, sin código ni procedencia).
+  const fresh = (Array.isArray(b.items) ? b.items : []) as { model?: string; imei?: string; color?: string }[];
   const storeId = Number(b.store_id);
-  if (!ids.length) return NextResponse.json({ error: "Elige al menos un equipo" }, { status: 400 });
+  if (!ids.length && !fresh.length) return NextResponse.json({ error: "Elige al menos un equipo" }, { status: 400 });
   if (![1, 2, 3, 4].includes(storeId)) return NextResponse.json({ error: "Elige la tienda donde se vendió" }, { status: 400 });
   const today = limaDay();
   const day = b.date ? String(b.date) : today;
@@ -33,6 +35,24 @@ export async function POST(req: NextRequest) {
     const [yy, mm, dd] = day.split("-");
     let done = 0, sales = 0;
     const skipped: string[] = [];
+    let created = 0;
+    for (const it of fresh.slice(0, 300)) {
+      const imei = clean(it.imei)?.replace(/\D/g, "") || null;
+      const model = clean(it.model) ?? "Celular";
+      if (imei) {
+        const ex = (await tx.execute({ sql: "SELECT id,status FROM products WHERE imei1=? OR imei2=? ORDER BY (status='stock') DESC LIMIT 1", args: [imei, imei] })).rows[0];
+        if (ex) {
+          if (ex.status === "stock") ids.push(Number(ex.id)); else skipped.push(`${model} (${imei}) ya figuraba como ${ex.status === "sold" ? "vendido" : "incautado"}`);
+          continue;
+        }
+      }
+      const ins = await tx.execute({
+        sql: "INSERT INTO products (kind,store_id,brand,model,imei1,color,qty,status,entry_date,created_by) VALUES ('celular',?,?,?,?,?,1,'stock',?,?)",
+        args: [storeId, model.split(" ")[0], model, imei, clean(it.color), day, g.user.name],
+      });
+      ids.push(Number(ins.lastInsertRowid));
+      created++;
+    }
     for (const id of ids) {
       const p = (await tx.execute({ sql: "SELECT * FROM products WHERE id=?", args: [id] })).rows[0];
       if (!p || p.status !== "stock") { skipped.push(p ? String(p.model) : `#${id}`); continue; }
@@ -56,7 +76,7 @@ export async function POST(req: NextRequest) {
     }
     if (done) await tx.execute({ sql: "INSERT INTO alerts (type,message,store_id,flagged) VALUES ('venta',?,?,0)", args: [`${g.user.name} marcó ${done} equipo(s) como vendido(s) desde el stock (${st.name}, ${dd}/${mm}/${yy})${sales ? ` con ${sales} venta(s) registrada(s)` : ""}.`, storeId] });
     await tx.commit();
-    return NextResponse.json({ ok: true, done, sales, skipped });
+    return NextResponse.json({ ok: true, done, sales, skipped, created });
   } catch (e) {
     await tx.rollback();
     return NextResponse.json({ error: e instanceof Error ? e.message : "No se pudo marcar como vendido" }, { status: 500 });

@@ -8,6 +8,7 @@ import { useCatalog } from "./useCatalog";
 import ImportModal from "./ImportModal";
 import DuplicateImei from "./DuplicateImei";
 import MarkSoldModal from "./MarkSoldModal";
+import QuickSoldModal from "./QuickSoldModal";
 
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -31,6 +32,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [letters, setLetters] = useState(false);
   const [dl, setDl] = useState(false);
   const [selling, setSelling] = useState(false);
+  const [quick, setQuick] = useState(false);
   const [making, setMaking] = useState("");
   const [group, setGroup] = useState(false);
   const [adv, setAdv] = useState(false);
@@ -136,6 +138,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         </div>
         <div className="flex gap-2">
           {role === "admin" && <Link href="/stock/editar" className="btn-primary !bg-amber-500 hover:!bg-amber-600"><Pencil className="h-4 w-4" /> Editar</Link>}
+          {role === "admin" && <button onClick={() => setQuick(true)} className="btn-ghost !border-emerald-300 !text-emerald-700"><Plus className="h-4 w-4" /> Subir vendidos</button>}
           {role === "admin" && <button onClick={() => setImporting(true)} className="btn-ghost"><Upload className="h-4 w-4" /> Importar hoja</button>}
           <div className="relative">
             <button onClick={() => setDl(!dl)} disabled={!!making} className="btn-ghost">
@@ -273,6 +276,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         </div>
       </div>
       {selling && cat && <MarkSoldModal items={selStock} stores={cat.stores} defaultStore={selStores.length === 1 && selStores[0] > 0 ? selStores[0] : null} onClose={() => setSelling(false)} onDone={() => { setSelling(false); setSel(new Set()); load(); }} />}
+      {quick && cat && <QuickSoldModal stores={cat.stores} onClose={() => setQuick(false)} onDone={() => { setQuick(false); load(); }} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={load} />}
       {edit && cat && <EditModal p={edit} stores={[{ id: 0, name: "Almacén general" }, ...cat.stores]} onClose={() => setEdit(null)} onDone={() => { setEdit(null); load(); }} />}
     </div>
