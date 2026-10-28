@@ -36,9 +36,19 @@ export async function findConflicts(opts: { code?: string | null; imeis?: (strin
 
 export const stripCost = <T extends Record<string, unknown>>(rows: T[]) => rows.map(({ cost, supplier, purchase_date, ...r }) => (void cost, void supplier, void purchase_date, r));
 
-export async function listProducts(where: string[], args: (string | number)[]) {
+const SORTS: Record<string, string> = {
+  recientes: "p.entry_date DESC, p.id DESC",
+  antiguos: "p.entry_date ASC, p.id ASC",
+  tienda: "p.store_id, p.entry_date DESC, p.id DESC",
+  marca: "p.brand COLLATE NOCASE, p.model COLLATE NOCASE, p.id",
+  precio_mayor: "p.price_suggested IS NULL, p.price_suggested DESC, p.id DESC",
+  precio_menor: "p.price_suggested IS NULL, p.price_suggested ASC, p.id DESC",
+  codigo: "p.code COLLATE NOCASE, p.id",
+};
+
+export async function listProducts(where: string[], args: (string | number)[], sort = "recientes") {
   return all<Product & { store_name: string }>(
-    `SELECT p.*, COALESCE(s.name,'Almacén general') AS store_name FROM products p LEFT JOIN stores s ON s.id=p.store_id ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY p.brand, p.model, p.id`,
+    `SELECT p.*, COALESCE(s.name,'Almacén general') AS store_name FROM products p LEFT JOIN stores s ON s.id=p.store_id ${where.length ? "WHERE " + where.join(" AND ") : ""} ORDER BY ${SORTS[sort] ?? SORTS.recientes}`,
     args,
   );
 }

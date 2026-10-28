@@ -25,6 +25,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [brand, setBrand] = useState("");
   const [kind, setKind] = useState("");
   const [status, setStatus] = useState("stock");
+  const [sort, setSort] = useState("recientes");
   const [group, setGroup] = useState(false);
   const [adv, setAdv] = useState(false);
   const [f, setF] = useState({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" });
@@ -36,7 +37,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const toggle = (id: number) => setSel((x) => { const n = new Set(x); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   const load = useCallback(async () => {
-    const sp = new URLSearchParams({ status });
+    const sp = new URLSearchParams({ status, sort });
     if (q) sp.set("q", q);
     if (store) sp.set("store", store);
     if (brand) sp.set("brand", brand);
@@ -45,7 +46,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     const r = await api<{ products: P[] }>(`/api/products?${sp}`);
     setRows(r.products);
     setLoading(false);
-  }, [q, store, brand, kind, status, f]);
+  }, [q, store, brand, kind, status, sort, f]);
 
   useEffect(() => {
     const t = setTimeout(load, 200);
@@ -119,13 +120,22 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         <select className="input !w-auto" value={kind} onChange={(e) => setKind(e.target.value)}>
           <option value="">Celulares y accesorios</option><option value="celular">Celulares</option><option value="accesorio">Accesorios</option>
         </select>
+        <select className="input !w-auto" value={f.ram} onChange={(e) => setF({ ...f, ram: e.target.value })}><option value="">Toda la RAM</option>{[1, 2, 3, 4, 6, 8, 12, 16].map((n) => <option key={n} value={n}>{n} GB RAM</option>)}</select>
+        <select className="input !w-auto" value={f.storage} onChange={(e) => setF({ ...f, storage: e.target.value })}><option value="">Todo almacenamiento</option>{[8, 16, 32, 64, 128, 256, 512, 1024].map((n) => <option key={n} value={n}>{storageLabel(n)}</option>)}</select>
+        <select className="input !w-auto" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })}><option value="">Todos los colores</option>{cat?.colors.map((c) => <option key={c.name}>{c.name}</option>)}</select>
+        <select className="input !w-auto font-semibold" value={sort} onChange={(e) => setSort(e.target.value)} title="Ordenar por">
+          <option value="recientes">Orden: más recientes primero</option>
+          <option value="antiguos">Orden: más antiguos primero</option>
+          <option value="tienda">Orden: por tienda</option>
+          <option value="marca">Orden: marca y modelo (A-Z)</option>
+          <option value="precio_mayor">Orden: precio mayor a menor</option>
+          <option value="precio_menor">Orden: precio menor a mayor</option>
+          <option value="codigo">Orden: código</option>
+        </select>
         <label className="flex items-center gap-2 px-2 text-sm font-medium text-slate-600"><input type="checkbox" className="accent-blue-600" checked={group} onChange={(e) => setGroup(e.target.checked)} /> Agrupar por marca</label>
         <button onClick={() => setAdv(!adv)} className={`chip !py-1.5 text-xs ${adv || activeAdv ? "chip-on" : ""}`}>Más filtros{activeAdv ? ` (${activeAdv})` : ""}</button>
         {adv && (
           <div className="anim-pop grid w-full gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div><label className="label">Color</label><select className="input" value={f.color} onChange={(e) => setF({ ...f, color: e.target.value })}><option value="">Todos</option>{cat?.colors.map((c) => <option key={c.name}>{c.name}</option>)}</select></div>
-            <div><label className="label">RAM</label><select className="input" value={f.ram} onChange={(e) => setF({ ...f, ram: e.target.value })}><option value="">Todas</option>{[1, 2, 3, 4, 6, 8, 12, 16].map((n) => <option key={n} value={n}>{n} GB</option>)}</select></div>
-            <div><label className="label">Almacenamiento</label><select className="input" value={f.storage} onChange={(e) => setF({ ...f, storage: e.target.value })}><option value="">Todos</option>{[8, 16, 32, 64, 128, 256, 512, 1024].map((n) => <option key={n} value={n}>{storageLabel(n)}</option>)}</select></div>
             <div><label className="label">Caja</label><select className="input" value={f.condition} onChange={(e) => setF({ ...f, condition: e.target.value })}><option value="">Todas</option><option value="Sellado">Sellada</option><option value="Abierto">Abierta</option></select></div>
             <div><label className="label">Ingresó desde</label><input type="date" className="input" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></div>
             <div><label className="label">Ingresó hasta</label><input type="date" className="input" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></div>
