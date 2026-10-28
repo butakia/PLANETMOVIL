@@ -122,6 +122,7 @@ async function migrate(c: Client) {
   await cleanStockV4(c);
   await createAndres(c);
   await purgeTestSales(c, "2026-10-28");
+  await purgeTestSales(c, "2026-10-28", true);
   await loadManualSold(c);
   await backfillSeller(c);
   await backfillSalePrice(c);
@@ -178,11 +179,13 @@ async function createAndres(c: Client) {
 }
 
 // Una sola vez: borra las ventas de prueba que hizo Omar ese día y devuelve los equipos al stock.
-async function purgeTestSales(c: Client, day: string) {
-  const key = `purge_sales_${day}`;
+async function purgeTestSales(c: Client, day: string, everyone = false) {
+  const key = everyone ? `purge_sales_all_${day}` : `purge_sales_${day}`;
   if ((await c.execute({ sql: "SELECT 1 FROM settings WHERE key=?", args: [key] })).rows.length) return;
   const omar = (await c.execute("SELECT id FROM users WHERE username='Omar'")).rows[0];
-  const sales = omar ? (await c.execute({ sql: "SELECT id,product_id,qty,status FROM sales WHERE day=? AND seller_id=?", args: [day, Number(omar.id)] })).rows : [];
+  const sales = everyone
+    ? (await c.execute({ sql: "SELECT id,product_id,qty,status FROM sales WHERE day=?", args: [day] })).rows
+    : omar ? (await c.execute({ sql: "SELECT id,product_id,qty,status FROM sales WHERE day=? AND seller_id=?", args: [day, Number(omar.id)] })).rows : [];
   const stmts: { sql: string; args: InValue[] }[] = [];
   for (const s of sales) {
     const id = Number(s.id);
