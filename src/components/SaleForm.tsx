@@ -8,7 +8,7 @@ import { limaToday, METHODS, soles, specLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import BarcodeScanner from "./BarcodeScanner";
 import NumPad from "./NumPad";
-import AccessoryPicker, { type Accessory } from "./AccessoryPicker";
+import SimpleAccessory, { accessoryName, type Accessory } from "./SimpleAccessory";
 
 type P = {
   id: number; kind: "celular" | "accesorio"; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -89,7 +89,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const remaining = Math.round((total - paid) * 100) / 100;
   const hasItem = !!p || manual || !!acc;
   const isAcc = !!acc || p?.kind === "accesorio";
-  const itemName = acc ? [acc.name, acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
+  const itemName = acc ? [accessoryName(acc), acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
 
   function chooseMode(m: "celular" | "accesorio") {
     setMode(m); setErr("");
@@ -115,7 +115,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
 
   function review() {
     setErr("");
-    if (mode === "accesorio" && !acc?.name) return setErr("Elige el accesorio");
+    if (mode === "accesorio" && !acc?.name.trim()) return setErr("Escribe el nombre del accesorio");
+    if (mode === "accesorio" && !acc?.category) return setErr("Elige la categoría (cargador, cable, audífonos, funda u otro)");
     if (manual && !fields.model?.trim()) return setErr("Escribe el modelo del equipo");
     if (late && !saleDate) return setErr("Indica la fecha en que se hizo la venta");
     if (!(total > 0)) return setErr("Ingresa el monto de la venta");
@@ -132,7 +133,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
         body: {
           product_id: p?.id, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
           manual: manual ? { ...fields, store_id: mStore } : undefined,
-          accessory: acc ? { name: acc.name, detail: acc.detail.trim(), store_id: mStore } : undefined,
+          accessory: acc ? { name: accessoryName(acc), detail: acc.detail.trim(), store_id: mStore, category: acc.category } : undefined,
           payments: payList,
         },
       });
@@ -191,8 +192,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       {/* 1b. Accesorio */}
       {mode === "accesorio" && (
         <div className="card p-4 sm:p-5">
-          <label className="label">1 · Accesorio</label>
-          <AccessoryPicker value={acc} onChange={setAcc} models={cat?.models.map((m) => m.name) ?? []} />
+          <label className="label !mb-3">1 · Datos del accesorio</label>
+          <SimpleAccessory onChange={setAcc} />
           {acc && user.role === "admin" && cat && (
             <div className="mt-3"><label className="label">Tienda</label>
               <select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>

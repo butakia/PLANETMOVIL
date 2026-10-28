@@ -97,13 +97,13 @@ export async function POST(req: NextRequest) {
       storeId = g.user.role === "seller" ? (g.user.store_id ?? 1) : [2, 3, 4].includes(Number(m.store_id)) ? Number(m.store_id) : 1;
       item = { kind: "celular", brand: null, model: clean(m.model), ram: num(m.ram), storage: num(m.storage), color: clean(m.color), condition: clean(m.condition), imei1: clean(m.imei1), imei2: clean(m.imei2), ident: null, code: clean(m.code) };
     } else if (b.accessory) {
-      const a = b.accessory as { name?: string; detail?: string; store_id?: number };
+      const a = b.accessory as { name?: string; detail?: string; store_id?: number; category?: string };
       const name = clean(a.name);
       if (!name) throw new Error("Elige el accesorio");
       const detail = clean(a.detail);
       storeId = g.user.role === "seller" ? (g.user.store_id ?? 1) : [2, 3, 4].includes(Number(a.store_id)) ? Number(a.store_id) : 1;
       qty = Math.min(Math.max(1, Math.floor(Number(b.qty)) || 1), 999);
-      item = { kind: "accesorio", brand: null, model: detail ? `${name} ${detail}` : name, ram: null, storage: null, color: null, condition: null, imei1: null, imei2: null, ident: null, code: null };
+      item = { kind: "accesorio", brand: clean(a.category), model: detail ? `${name} ${detail}` : name, ram: null, storage: null, color: null, condition: null, imei1: null, imei2: null, ident: null, code: null };
     } else throw new Error("Falta elegir o escribir el equipo");
 
     const store = (await tx.execute({ sql: "SELECT series,name FROM stores WHERE id=?", args: [storeId] })).rows[0];
