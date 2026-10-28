@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, Clock, Download, FileText, Search, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, Download, FileText, Loader2, Search, X } from "lucide-react";
 import { api, downloadCSV } from "@/lib/client";
 import { addDays, fmtDay, fmtTime, limaToday, METHODS, soles } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -30,6 +30,21 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
   const [rows, setRows] = useState<S[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
+  const [making, setMaking] = useState(false);
+  async function pdf() {
+    setMaking(true);
+    try {
+      const { downloadSalesPdf } = await import("@/lib/sales-report");
+      const storeName = store ? cat?.stores.find((x) => String(x.id) === store)?.name : "";
+      const filters = [storeName && `Tienda: ${storeName}`, seller && `Vendedora: ${users.find((u) => String(u.id) === seller)?.name ?? ""}`, method && `Medio de pago: ${method}`, status && `Estado: ${({ ok: "válidas", pending: "por aprobar", rejected: "rechazadas" } as Record<string, string>)[status] ?? status}`, q && `Búsqueda: "${q}"`].filter(Boolean) as string[];
+      await downloadSalesPdf(rows as never, {
+        title: "Reporte de ventas",
+        period: from === to ? `Ventas del ${fmtDay(from)}` : `Ventas del ${fmtDay(from)} al ${fmtDay(to)}`,
+        filters,
+        storeColor: (id: number) => cat?.stores.find((x) => x.id === id)?.color ?? "#64748b",
+      });
+    } finally { setMaking(false); }
+  }
 
   useEffect(() => {
     if (new URLSearchParams(window.location.search).get("estado") === "pending") { setStatus("pending"); setPreset("rango"); setRange(["2020-01-01", limaToday()]); }
@@ -59,6 +74,7 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
           <p className="text-sm text-slate-500"><b className="text-slate-800">{valid.length}</b> ventas · <b className="text-slate-800">{soles(total)}</b>{pending.length > 0 && <span className="ml-2 font-semibold text-amber-700">· {pending.length} pendiente(s) de aprobación</span>}</p></div>
         <div className="flex gap-2">
           {role === "seller" && <Link href="/vender" className="btn-primary">Ingresar venta</Link>}
+          <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700" disabled={making || rows.length === 0} onClick={pdf}>{making ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} Reporte PDF</button>
           <button className="btn-ghost" onClick={() => downloadCSV(`ventas-${from}_${to}.csv`, [["N°", "Fecha", "Hora", "Estado", "Tienda", "Vendedora", "Equipo", "IMEI", "Cód.", "Cliente", "DNI", "Celular", "Monto", "Pagos"],
             ...rows.map((s) => [s.number, fmtDay(s.day), fmtTime(s.created_at), s.status === "ok" ? "Válida" : s.status === "pending" ? "Pendiente" : "Rechazada", s.store_name, s.seller_name, s.item.model, s.item.imei1, s.item.code, s.customer_name, s.dni, s.phone, s.price, s.payments.map((p: S) => `${p.method} ${p.amount}`).join(" + ")])])}>
             <Download className="h-4 w-4" /> CSV</button>
