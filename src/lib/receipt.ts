@@ -112,7 +112,8 @@ export async function shareReceipt(s: SaleDoc) {
 /** Ticket para tiquetera térmica (80 mm o 58 mm de ancho, alto automático). */
 export function buildTicketPdf(s: SaleDoc, w: 80 | 58 = 80) {
   const draw = (doc: jsPDF) => {
-    const m = 3, cw = w - 2 * m, cx = w / 2;
+    // En papel de 58 mm la cabeza térmica imprime unos 48 mm: margen de 5 mm a cada lado para que no se corte el texto.
+    const m = w === 58 ? 5 : 3, cw = w - 2 * m, cx = w / 2;
     const fs = w === 80 ? 8 : 7;
     const lh = fs * 0.46;
     let y = 6;
@@ -163,8 +164,71 @@ export function buildTicketPdf(s: SaleDoc, w: 80 | 58 = 80) {
   return doc;
 }
 
-export function openTicket(s: SaleDoc, w: 80 | 58) {
-  const doc = buildTicketPdf(s, w);
-  doc.autoPrint();
-  window.open(doc.output("bloburl").toString(), "_blank");
+const escH = (t: string) => t.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]!);
+
+/** Ticket como HTML para imprimir directo (iframe oculto) con el ancho exacto del rollo y el alto justo del contenido. */
+export function ticketHtml(s: SaleDoc, w: 80 | 58) {
+  const m = w === 58 ? 5 : 3;
+  const fs = w === 58 ? 7 : 8;
+  const c = (t: string, bold = false, size = fs) => `<div class="c" style="font-size:${size}pt;${bold ? "font-weight:700" : ""}">${escH(t)}</div>`;
+  const l = (t: string, bold = false) => `<div style="${bold ? "font-weight:700" : ""}">${escH(t)}</div>`;
+  const p = (a: string, b: string, bold = false) => `<div class="p" style="${bold ? "font-weight:700" : ""}"><span>${escH(a)}</span><span>${escH(b)}</span></div>`;
+  const hr = `<div class="hr"></div>`;
+  const d = describe(s);
+  const body = [
+    c((s.store_owner || s.store_name).toUpperCase(), true, fs + 1),
+    s.store_owner ? c(`Nombre comercial: ${s.store_name}`) : "",
+    s.store_ruc ? c(`RUC: ${s.store_ruc}`) : "",
+    s.store_address ? c(s.store_address) : "",
+    s.store_phone ? c(`Tel.: ${s.store_phone}`) : "",
+    hr,
+    c("CONSTANCIA DE VENTA", true, fs + 1),
+    c(`N° ${s.number}`, true),
+    hr,
+    l(`Fecha: ${fmtDateTime(s.created_at)}`),
+    l(`Cliente: ${s.customer_name || "Cliente varios"}`),
+    s.dni ? l(`DNI: ${s.dni}`) : "",
+    s.phone ? l(`Cel.: ${s.phone}`) : "",
+    l(`Atendido por: ${s.seller_name}`),
+    hr,
+    l("CANT  DESCRIPCION", true),
+    l(`${s.qty.toFixed(0)} x ${d[0]}`, true),
+    ...d.slice(1).map((x) => l(x)),
+    p("P. unit.:", `S/ ${money(s.price / s.qty)}`),
+    hr,
+    p("TOTAL:", `S/ ${money(s.price)}`, true),
+    l(`SON: ${amountInWords(s.price)}`),
+    ...s.payments.map((x) => p(x.method + ":", `S/ ${money(x.amount)}`)),
+    hr,
+    c("Gracias por su compra."),
+    c("Conserve esta constancia como respaldo de su pago y garantia."),
+  ].join("");
+  const css = (h?: number) => `@page{size:${w}mm ${h ? h + "mm" : "auto"};margin:0}
+html,body{margin:0;padding:0;background:#fff}
+body{width:${w}mm;box-sizing:border-box;padding:3mm ${m}mm;font-family:"Courier New",Courier,monospace;font-size:${fs}pt;line-height:1.25;color:#000;word-break:break-word}
+.c{text-align:center}.p{display:flex;justify-content:space-between;gap:2mm}
+.hr{border-top:.2mm dashed #000;margin:1.2mm 0}`;
+  return { body, css };
+}
+
+/** Imprime el ticket sin abrir pestañas: solo el cuadro de impresión, ya con el tamaño del rollo. */
+export async function openTicket(s: SaleDoc, w: 80 | 58) {
+  const { body, css } = ticketHtml(s, w);
+  const frame = document.createElement("iframe");
+  frame.style.cssText = `position:fixed;left:-9999px;top:0;width:${w}mm;height:10mm;border:0`;
+  document.body.appendChild(frame);
+  const d = frame.contentDocument!;
+  d.open();
+  d.write(`<!doctype html><html><head><meta charset="utf-8"><title>Ticket ${escH(s.number)}</title><style>${css()}</style></head><body>${body}</body></html>`);
+  d.close();
+  await new Promise((r) => setTimeout(r, 250));
+  // Alto exacto del contenido (px → mm) para que la etiquetera corte justo donde termina el ticket
+  const mm = Math.ceil((d.body.scrollHeight * 25.4) / 96) + 2;
+  d.querySelector("style")!.textContent = css(mm);
+  await new Promise((r) => setTimeout(r, 100));
+  const done = () => setTimeout(() => frame.remove(), 1000);
+  frame.contentWindow!.addEventListener("afterprint", done);
+  frame.contentWindow!.focus();
+  frame.contentWindow!.print();
+  setTimeout(done, 60000);
 }

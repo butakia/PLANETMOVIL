@@ -10,9 +10,11 @@ export default function ReceiptView({ id }: { id: number }) {
   const [s, setS] = useState<SaleDoc | null>(null);
   const [fresh, setFresh] = useState(false);
   const [err, setErr] = useState("");
-  const [tw, setTw] = useState<80 | 58>(80);
+  const [tw, setTw] = useState<80 | 58>(58);
+  const chooseTw = (w: 80 | 58) => { setTw(w); try { localStorage.setItem("pm_ticket_w", String(w)); } catch { /* sin almacenamiento */ } };
 
   useEffect(() => {
+    try { if (localStorage.getItem("pm_ticket_w") === "80") setTw(80); } catch { /* sin almacenamiento */ }
     setFresh(new URLSearchParams(window.location.search).has("nueva"));
     api<{ sale: SaleDoc }>(`/api/sales/${id}`).then((r) => setS(r.sale)).catch((e) => setErr(e.message));
   }, [id]);
@@ -30,12 +32,12 @@ export default function ReceiptView({ id }: { id: number }) {
       {s.status === "pending" && <div className="no-print rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm font-semibold text-amber-900">⚠ Venta fuera de tiempo pendiente de aprobación del administrador. Aún no se descuenta del stock.</div>}
       {s.status === "rejected" && <div className="no-print rounded-2xl border border-rose-200 bg-rose-50 p-4 text-sm font-semibold text-rose-800">Esta venta fue rechazada por el administrador.</div>}
       <div className="no-print flex flex-wrap gap-2">
+        <button onClick={() => openTicket(s, tw)} className="btn-primary px-5"><ReceiptText className="h-5 w-5" /> Imprimir ticket · {tw} mm{tw === 58 ? " (NES D58)" : ""}</button>
         <button onClick={() => shareReceipt(s)} className="btn-primary bg-emerald-600 hover:bg-emerald-700"><MessageCircle className="h-4 w-4" /> Enviar por WhatsApp / compartir</button>
         <button onClick={() => buildReceiptPdf(s).save(`Constancia-${s.number}.pdf`)} className="btn-ghost"><Download className="h-4 w-4" /> Descargar PDF</button>
         <button onClick={() => window.print()} className="btn-ghost"><Printer className="h-4 w-4" /> Imprimir</button>
         <div className="flex items-center gap-1 rounded-xl border border-slate-200 bg-white p-1">
-          <select value={tw} onChange={(e) => setTw(Number(e.target.value) as 80 | 58)} className="rounded-lg bg-transparent px-2 py-1.5 text-sm font-semibold outline-none"><option value={80}>Ticket 80 mm</option><option value={58}>Ticket 58 mm</option></select>
-          <button onClick={() => openTicket(s, tw)} className="btn-soft !py-1.5"><ReceiptText className="h-4 w-4" /> Imprimir ticket</button>
+          <select value={tw} onChange={(e) => chooseTw(Number(e.target.value) as 80 | 58)} className="rounded-lg bg-transparent px-2 py-1.5 text-sm font-semibold outline-none"><option value={58}>Ticket 58 mm</option><option value={80}>Ticket 80 mm</option></select>
           <button onClick={() => buildTicketPdf(s, tw).save(`Ticket-${s.number}.pdf`)} className="btn-ghost !py-1.5"><Download className="h-4 w-4" /> Descargar</button>
         </div>
         <Link href="/vender" className="btn-soft ml-auto"><ShoppingCart className="h-4 w-4" /> Nueva venta</Link>
