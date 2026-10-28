@@ -1,10 +1,10 @@
-﻿// Reporte de stock descargable: PDF y Excel con el mismo estilo de la web (colores por tienda y marca, resumen arriba).
+// Reporte de stock descargable: PDF y Excel con el mismo estilo de la web (colores por tienda y marca, resumen arriba).
 import { fmtDay, soles, storageLabel } from "./format";
 
 export type ReportRow = {
   store_id: number; store_name: string; brand: string | null; model: string; ram: number | null; storage: number | null;
   color: string | null; condition: string | null; code: string | null; imei1: string | null; imei2: string | null; ident: string | null;
-  qty: number; price_suggested: number | null; entry_date: string; status: string; kind: string; flag?: string | null;
+  qty: number; price_suggested: number | null; entry_date: string; status: string; kind: string; flag?: string | null; seller?: string | null; sale_price?: number | null;
 };
 export type ReportMeta = {
   title: string;
@@ -138,7 +138,7 @@ export async function downloadStockPdf(allRows: ReportRow[], meta: ReportMeta) {
 
   // Detalle por tienda
   const showSit = rows.some((r) => r.status !== "stock");
-  const head = ["Cód.", "Marca", "Modelo", "RAM", "Alm.", "Color", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(showSit ? ["Situación"] : [])];
+  const head = ["Cód.", "Marca", "Modelo", "RAM", "Alm.", "Color", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(showSit ? ["Situación", "Vendedora", "P. venta"] : [])];
   doc.addPage();
   let y = M;
   for (const s of sm.stores) {
@@ -151,7 +151,7 @@ export async function downloadStockPdf(allRows: ReportRow[], meta: ReportMeta) {
     autoTable(doc, {
       startY: y + 11, margin: { left: M, right: M, bottom: 14 },
       head: [head],
-      body: list.map((r) => [r.code ?? "-", r.brand ?? "-", r.model + (r.kind === "accesorio" && r.qty > 1 ? ` x${r.qty}` : ""), r.ram ? `${r.ram}GB` : "-", r.storage ? storageLabel(r.storage) : "-", r.color ?? "-", r.imei1 ?? "-", r.imei2 ?? r.ident ?? "-", r.price_suggested == null ? "-" : soles(r.price_suggested), fmtDay(r.entry_date), ...(showSit ? [statusLabel(r.status)] : [])]),
+      body: list.map((r) => [r.code ?? "-", r.brand ?? "-", r.model + (r.kind === "accesorio" && r.qty > 1 ? ` x${r.qty}` : ""), r.ram ? `${r.ram}GB` : "-", r.storage ? storageLabel(r.storage) : "-", r.color ?? "-", r.imei1 ?? "-", r.imei2 ?? r.ident ?? "-", r.price_suggested == null ? "-" : soles(r.price_suggested), fmtDay(r.entry_date), ...(showSit ? [statusLabel(r.status), r.seller ?? "-", r.sale_price == null ? "-" : soles(r.sale_price)] : [])]),
       theme: "plain",
       styles: { fontSize: 8, cellPadding: { top: 1.7, bottom: 1.7, left: 2, right: 2 }, textColor: [30, 41, 59], overflow: "linebreak" },
       headStyles: { fillColor: rgb("#1e293b"), textColor: 255, fontStyle: "bold", fontSize: 8 },
@@ -249,13 +249,13 @@ export async function downloadStockXlsx(allRows: ReportRow[], meta: ReportMeta) 
 
   // Hoja 2: detalle
   const ws = wb.addWorksheet("Stock", { views: [{ state: "frozen", ySplit: 1 }] });
-  const cols: [string, number][] = [["Tienda", 20], ["Cód.", 10], ["Marca", 13], ["Modelo", 28], ["RAM", 8], ["Almacenamiento", 15], ["Color", 14], ["Caja", 10], ["IMEI 1", 18], ["IMEI 2 / Ident.", 18], ["Cant.", 7], ["Precio sugerido", 16], ["Ingreso", 12], ["Situación", 12]];
+  const cols: [string, number][] = [["Tienda", 20], ["Cód.", 10], ["Marca", 13], ["Modelo", 28], ["RAM", 8], ["Almacenamiento", 15], ["Color", 14], ["Caja", 10], ["IMEI 1", 18], ["IMEI 2 / Ident.", 18], ["Cant.", 7], ["Precio sugerido", 16], ["Ingreso", 12], ["Situación", 12], ["Vendedora", 14], ["Precio de venta", 16]];
   ws.columns = cols.map(([header, width]) => ({ header, width }));
   const h = ws.getRow(1);
   h.height = 24;
   h.eachCell((c) => { c.font = { bold: true, color: { argb: argb("#ffffff") } }; c.fill = fill("#1e293b"); c.alignment = { vertical: "middle", indent: 1 }; });
   rows.forEach((r, i) => {
-    const row = ws.addRow([r.store_name, r.code ?? "", r.brand ?? "", r.model, r.ram ?? "", r.storage ? storageLabel(r.storage) : "", r.color ?? "", r.condition ?? "", r.imei1 ?? "", r.imei2 ?? r.ident ?? "", r.qty, r.price_suggested ?? "", fmtDay(r.entry_date), statusLabel(r.status)]);
+    const row = ws.addRow([r.store_name, r.code ?? "", r.brand ?? "", r.model, r.ram ?? "", r.storage ? storageLabel(r.storage) : "", r.color ?? "", r.condition ?? "", r.imei1 ?? "", r.imei2 ?? r.ident ?? "", r.qty, r.price_suggested ?? "", fmtDay(r.entry_date), statusLabel(r.status), r.seller ?? "", r.sale_price ?? ""]);
     const base = r.flag ? "#fee2e2" : r.status === "incautado" ? "#fef3c7" : i % 2 ? "#f8fafc" : "#ffffff";
     const sold = r.status === "sold";
     row.eachCell({ includeEmpty: true }, (c) => { c.fill = fill(base); c.border = border; c.font = { color: { argb: argb(sold ? "#94a3b8" : "#1e293b") } }; c.alignment = { vertical: "middle" }; });
@@ -267,6 +267,8 @@ export async function downloadStockXlsx(allRows: ReportRow[], meta: ReportMeta) 
     row.getCell(9).font = { name: "Consolas", color: { argb: argb(sold ? "#94a3b8" : "#1e293b") } };
     row.getCell(10).font = { name: "Consolas", color: { argb: argb(sold ? "#94a3b8" : "#1e293b") } };
     row.getCell(12).numFmt = '"S/" #,##0.00';
+    row.getCell(16).numFmt = '"S/" #,##0.00';
+    if (r.sale_price != null) row.getCell(16).font = { bold: true, color: { argb: argb("#047857") } };
     row.getCell(12).font = { bold: true, color: { argb: argb(sold ? "#94a3b8" : "#047857") } };
   });
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };

@@ -113,6 +113,7 @@ async function migrate(c: Client) {
   try { await c.execute("ALTER TABLE products ADD COLUMN flag TEXT"); } catch {}
   try { await c.execute("ALTER TABLE products ADD COLUMN src TEXT"); } catch {}
   try { await c.execute("ALTER TABLE products ADD COLUMN seller TEXT"); } catch {}
+  try { await c.execute("ALTER TABLE products ADD COLUMN sale_price REAL"); } catch {}
   await loadSolucionesStock(c);
   await loadExtraStock(c);
   await flagRepeatedImei(c);
@@ -123,6 +124,16 @@ async function migrate(c: Client) {
   await purgeTestSales(c, "2026-10-28");
   await loadManualSold(c);
   await backfillSeller(c);
+  await backfillSalePrice(c);
+}
+
+// Una sola vez: el precio de venta de los equipos vendidos sale de su venta registrada (por unidad).
+async function backfillSalePrice(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='sale_price_v1'")).rows.length) return;
+  await c.batch([
+    { sql: "UPDATE products SET sale_price=(SELECT price*1.0/qty FROM sales WHERE product_id=products.id AND status='ok' AND qty>0 ORDER BY id DESC LIMIT 1) WHERE status='sold' AND sale_price IS NULL", args: [] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('sale_price_v1','1')", args: [] },
+  ], "write");
 }
 
 // Una sola vez: la vendedora de los equipos ya vendidos sale de su venta o de la nota "Vendedora: X".

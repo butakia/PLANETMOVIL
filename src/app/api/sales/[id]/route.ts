@@ -25,7 +25,7 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!s) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
   const tx = await (await db()).transaction("write");
   try {
-    await tx.execute({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL WHERE id=?", args: [s.qty, s.product_id] });
+    await tx.execute({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL, sale_price=NULL WHERE id=?", args: [s.qty, s.product_id] });
     await tx.execute({ sql: "DELETE FROM payments WHERE sale_id=?", args: [id] });
     await tx.execute({ sql: "DELETE FROM sales WHERE id=?", args: [id] });
     await tx.execute({ sql: "UPDATE alerts SET sale_id=NULL WHERE sale_id=?", args: [id] });

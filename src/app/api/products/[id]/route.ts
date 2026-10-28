@@ -35,6 +35,16 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if ("imei1" in b && imei1 && imei1 !== cur.imei1) set("flag", null); // IMEI corregido: se quita la marca roja
     if ("imei2" in b) set("imei2", imei2);
     if ("ident" in b) set("ident", clean(b.ident));
+    if ("sale_price" in b) {
+      const sp = num(b.sale_price);
+      if (sp !== null && !(sp > 0)) return NextResponse.json({ error: "El precio de venta debe ser mayor a 0" }, { status: 400 });
+      set("sale_price", sp);
+      // Si el equipo tiene una venta registrada, su monto y su pago único se corrigen también.
+      if (sp !== null) {
+        await run("UPDATE payments SET amount=? * (SELECT qty FROM sales WHERE id=payments.sale_id) WHERE sale_id IN (SELECT id FROM sales WHERE product_id=? AND status='ok') AND (SELECT COUNT(*) FROM payments p2 WHERE p2.sale_id=payments.sale_id)=1", [sp, id]);
+        await run("UPDATE sales SET price=?*qty WHERE product_id=? AND status='ok'", [sp, id]);
+      }
+    }
     if ("seller" in b) {
       const seller = clean(b.seller);
       set("seller", seller);

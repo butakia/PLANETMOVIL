@@ -13,7 +13,7 @@ import QuickSoldModal from "./QuickSoldModal";
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
   ident: string | null; code: string | null; ram: number | null; storage: number | null; color: string | null; condition: string | null; qty: number;
-  price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null; seller?: string | null;
+  price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null; seller?: string | null; sale_price?: number | null;
 };
 
 const statusLabel = (s: string) => (s === "stock" ? "En stock" : s === "incautado" ? "Incautado" : "Vendido");
@@ -94,6 +94,12 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const oneSel = sel.size === 1 ? rows.find((r) => sel.has(r.id)) : null;
   const selStock = rows.filter((r) => sel.has(r.id) && r.status === "stock");
   const selStores = [...new Set(selStock.map((r) => r.store_id))];
+  const selSold = rows.filter((r) => sel.has(r.id) && r.status === "sold");
+  const [bulkPrice, setBulkPrice] = useState("");
+  async function applyPrice() {
+    for (const r of selSold) await api(`/api/products/${r.id}`, { method: "PATCH", body: { sale_price: Number(bulkPrice) } });
+    setBulkPrice(""); setSel(new Set()); load();
+  }
 
   const SORT_NAMES: Record<string, string> = { recientes: "más recientes primero", antiguos: "más antiguos primero", tienda: "por tienda", marca: "marca y modelo", precio_mayor: "precio mayor a menor", precio_menor: "precio menor a mayor", codigo: "código" };
   async function report(what: "pdf_con" | "pdf_sin" | "xlsx" | "csv") {
@@ -223,6 +229,12 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <span>{sel.size} seleccionado{sel.size > 1 ? "s" : ""}</span>
           {oneSel && oneSel.kind === "accesorio" && oneSel.qty > 1 && <input type="number" min={1} max={oneSel.qty - 1} placeholder={"cuántas de " + oneSel.qty} className="w-32 rounded-lg px-2 py-1 text-slate-900" value={aqty} onChange={(e) => setAqty(e.target.value)} />}
           {selStock.length > 0 && <button onClick={() => setSelling(true)} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold hover:bg-emerald-600">✓ Marcar como vendido{selStock.length > 1 ? ` (${selStock.length})` : ""}</button>}
+          {selSold.length > 0 && (
+            <span className="flex items-center gap-1.5">
+              <input inputMode="decimal" placeholder="Precio de venta S/" value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/[^\d.]/g, ""))} className="w-36 rounded-lg px-2 py-1 text-slate-900" />
+              <button disabled={!(Number(bulkPrice) > 0)} onClick={applyPrice} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold disabled:opacity-40">Poner precio a {selSold.length} vendido{selSold.length > 1 ? "s" : ""}</button>
+            </span>
+          )}
           <span className="opacity-70">Asignar a:</span>
           {cat?.stores.map((x) => <button key={x.id} onClick={() => assign(x.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold" style={{ background: x.color }}>{x.name}</button>)}
           <button onClick={() => assign(0)} className="rounded-lg bg-slate-500 px-3 py-1.5 text-xs font-bold">Almacén general</button>
@@ -234,7 +246,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación", "Vendedora"] : []), ""].map((h, i) => (
+                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación", "Vendedora", "P. venta"] : []), ""].map((h, i) => (
                   <th key={i} className="th">
                     {h}
                     {h === "Cód." && (
@@ -271,6 +283,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>
                         {status !== "stock" && <td className="td">{statusLabel(r.status)}</td>}
                         {status !== "stock" && <td className="td">{r.status === "sold" ? (role === "admin" ? <SellerCell id={r.id} seller={r.seller ?? null} names={sellerNames} onSaved={load} /> : (r.seller ?? "—")) : "—"}</td>}
+                        {status !== "stock" && <td className="td">{r.status === "sold" ? (role === "admin" ? <SalePriceCell id={r.id} price={r.sale_price ?? null} onSaved={load} /> : soles(r.sale_price)) : "—"}</td>}
                         <td className="td">{role === "admin" && r.kind === "accesorio" && <Link href={"/etiquetas?id=" + r.id} title="Etiqueta QR / código de barras" className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><QrCode className="h-4 w-4" /></Link>}{role === "admin" && <button onClick={() => setEdit(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><Pencil className="h-4 w-4" /></button>}</td>
                       </tr>
                     );
@@ -354,6 +367,36 @@ function SellerCell({ id, seller, names, onSaved }: { id: number; seller: string
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
         className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 text-sm outline-none" />
       <datalist id="stock-sellers">{names.map((n) => <option key={n} value={n} />)}</datalist>
+      {err && <div className="mt-0.5 text-[10px] font-semibold text-rose-600">{err}</div>}
+    </div>
+  );
+}
+
+/** Precio de venta editable en la misma fila (equipos vendidos). Si hay una venta registrada, también se corrige su monto. */
+function SalePriceCell({ id, price, onSaved }: { id: number; price: number | null; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(price != null ? String(price) : "");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    const nv = v.trim();
+    if (nv === (price != null ? String(price) : "")) { setEditing(false); setErr(""); return; }
+    setBusy(true);
+    try {
+      await api(`/api/products/${id}`, { method: "PATCH", body: { sale_price: nv === "" ? null : Number(nv) } });
+      setEditing(false); setErr(""); onSaved();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  if (!editing)
+    return (
+      <button onClick={() => { setV(price != null ? String(price) : ""); setEditing(true); }} title="Clic para poner o cambiar el precio de venta"
+        className={`rounded-md px-1.5 py-0.5 text-left text-sm hover:bg-white hover:ring-1 hover:ring-blue-300 ${price != null ? "font-bold text-emerald-700" : "italic text-slate-400"}`}>{price != null ? soles(price) : "+ precio"}</button>
+    );
+  return (
+    <div className="w-28">
+      <input autoFocus inputMode="decimal" disabled={busy} value={v} onChange={(e) => setV(e.target.value.replace(/[^\d.]/g, ""))} onBlur={save} placeholder="S/"
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
+        className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 text-sm outline-none" />
       {err && <div className="mt-0.5 text-[10px] font-semibold text-rose-600">{err}</div>}
     </div>
   );

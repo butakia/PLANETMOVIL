@@ -59,7 +59,7 @@ export async function POST(req: NextRequest) {
       if (!p || p.status !== "stock") { skipped.push(p ? String(p.model) : `#${id}`); continue; }
       const qty = Number(p.qty) || 1;
       const note = `Vendido el ${dd}/${mm}/${yy} en ${st.name}${named ? ` · Vendedora: ${sellerName}` : ""}${price ? ` · S/ ${price.toFixed(2)}` : ""}`;
-      await tx.execute({ sql: "UPDATE products SET qty=0, status='sold', store_id=?, notes=?, seller=? WHERE id=?", args: [storeId, [p.notes, note].filter(Boolean).join(" | "), named || price ? sellerName : null, id] });
+      await tx.execute({ sql: "UPDATE products SET qty=0, status='sold', store_id=?, notes=?, seller=?, sale_price=? WHERE id=?", args: [storeId, [p.notes, note].filter(Boolean).join(" | "), named || price ? sellerName : null, price, id] });
       done++;
       if (price) {
         seq++;

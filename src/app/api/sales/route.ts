@@ -122,7 +122,7 @@ export async function POST(req: NextRequest) {
 
     if (p && !late) {
       const left = p.qty - qty;
-      await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? g.user.name : null, p.id] });
+      await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=?, sale_price=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? g.user.name : null, left <= 0 ? price / qty : null, p.id] });
     }
 
     const noStock = !p && !b.accessory;
