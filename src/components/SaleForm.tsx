@@ -2,7 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createPortal } from "react-dom";
-import { AlertTriangle, ArrowLeft, ArrowLeftRight, Camera, ChevronRight, Clock, Headphones, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart, Smartphone, Wrench } from "lucide-react";
+import { AlertTriangle, ArrowLeft, ArrowLeftRight, Camera, Check, ChevronRight, Clock, Headphones, Loader2, Minus, PencilLine, Plus, Search, ShoppingCart, Smartphone, Wrench } from "lucide-react";
 import { api } from "@/lib/client";
 import { limaToday, METHODS, soles, specLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -29,6 +29,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const [acc, setAcc] = useState<Accessory | null>(null);
   const [svc, setSvc] = useState<Service>({ technician: "", detail: "", date: limaToday() });
   const [tTo, setTTo] = useState<number>(user.store_id ?? 1);
+  const [moving, setMoving] = useState(false);
+  const [movedMsg, setMovedMsg] = useState("");
   const [success, setSuccess] = useState(false);
   const [sellerPick, setSellerPick] = useState("");
   const [sellerList, setSellerList] = useState<{ id: number; name: string }[]>([]);
@@ -119,11 +121,24 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   useEffect(() => { if (mode === "celular") codeRef.current?.focus(); }, [mode]);
   const store = cat?.stores.find((s) => s.id === (p?.store_id ?? mStore));
 
+  // Tiendas a las que se puede traspasar (todas menos donde ya está) y destino realmente elegido.
+  const destinations = (cat?.stores ?? []).filter((s) => s.id !== p?.store_id);
+  const destTo = destinations.some((s) => s.id === tTo) ? tTo : (destinations[0]?.id ?? tTo);
+  useEffect(() => { if (user.store_id) setTTo(user.store_id); }, [user.store_id]);
+
   async function transfer(to: number | null = user.store_id) {
-    if (!p || !to) return;
-    try { await api("/api/transfer", { body: { product_id: p.id, to_store: to } }); } catch (e) { setErr((e as Error).message); return; }
-    playSuccess();
-    await search(p.code ?? code);
+    if (!p || !to || moving) return;
+    setMoving(true); setErr(""); setMovedMsg("");
+    try {
+      await api("/api/transfer", { body: { product_id: p.id, to_store: to } });
+      const name = cat?.stores.find((s) => s.id === to)?.name ?? "la otra tienda";
+      setP({ ...p, store_id: to, store_name: name }); // se actualiza al instante, sin volver a buscar
+      playSuccess();
+      setMovedMsg(`Equipo traspasado a ${name}`);
+      setTimeout(() => setMovedMsg(""), 4000);
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally { setMoving(false); }
   }
 
   function review() {
@@ -285,13 +300,15 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
                 <AlertTriangle className="h-4 w-4" />
                 <span>Este equipo está en <b>{inAlmacen ? "Almacén" : p?.store_name}</b>{inAlmacen ? ". Traspásalo a una tienda para venderlo." : "."}</span>
                 <span className="ml-auto flex items-center gap-2">
-                  <select className="input !w-auto !py-1.5 text-sm" value={tTo} onChange={(e) => setTTo(Number(e.target.value))} aria-label="Traspasar a">
-                    {cat?.stores.filter((s) => s.id !== p?.store_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  <select className="input !w-auto !py-1.5 text-sm" value={destTo} onChange={(e) => setTTo(Number(e.target.value))} aria-label="Traspasar a">
+                    {destinations.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
-                  <button onClick={() => transfer(tTo)} className="btn-primary !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Traspasar</button>
+                  <button onClick={() => transfer(destTo)} disabled={moving} className="btn-primary !py-1.5">{moving ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowLeftRight className="h-4 w-4" />} {moving ? "Traspasando…" : "Traspasar"}</button>
                 </span>
               </div>
             )}
+            {movedMsg && <div className="anim-pop flex items-center gap-2 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800"><Check className="h-4 w-4" /> {movedMsg}</div>}
+            {err && hasItem && !confirm && otherStore && <p className="bg-rose-50 px-4 py-2 text-sm font-medium text-rose-700">{err}</p>}
             <div className="p-4">
               {!editing ? (
                 <dl className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm sm:grid-cols-3">
