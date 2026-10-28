@@ -7,6 +7,7 @@ import { fmtDay, soles, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import ImportModal from "./ImportModal";
 import DuplicateImei from "./DuplicateImei";
+import MarkSoldModal from "./MarkSoldModal";
 
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -27,6 +28,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [status, setStatus] = useState("stock");
   const [sort, setSort] = useState("recientes");
   const [dl, setDl] = useState(false);
+  const [selling, setSelling] = useState(false);
   const [making, setMaking] = useState("");
   const [group, setGroup] = useState(false);
   const [adv, setAdv] = useState(false);
@@ -75,6 +77,8 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     setSel(new Set()); setAqty(""); load();
   }
   const oneSel = sel.size === 1 ? rows.find((r) => sel.has(r.id)) : null;
+  const selStock = rows.filter((r) => sel.has(r.id) && r.status === "stock");
+  const selStores = [...new Set(selStock.map((r) => r.store_id))];
 
   const SORT_NAMES: Record<string, string> = { recientes: "más recientes primero", antiguos: "más antiguos primero", tienda: "por tienda", marca: "marca y modelo", precio_mayor: "precio mayor a menor", precio_menor: "precio menor a mayor", codigo: "código" };
   async function report(kind: "pdf" | "xlsx" | "csv") {
@@ -200,6 +204,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         <div className="anim-pop sticky top-2 z-20 flex flex-wrap items-center gap-3 rounded-2xl bg-blue-900 p-3 text-sm font-semibold text-white shadow-xl">
           <span>{sel.size} seleccionado{sel.size > 1 ? "s" : ""}</span>
           {oneSel && oneSel.kind === "accesorio" && oneSel.qty > 1 && <input type="number" min={1} max={oneSel.qty - 1} placeholder={"cuántas de " + oneSel.qty} className="w-32 rounded-lg px-2 py-1 text-slate-900" value={aqty} onChange={(e) => setAqty(e.target.value)} />}
+          {selStock.length > 0 && <button onClick={() => setSelling(true)} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold hover:bg-emerald-600">✓ Marcar como vendido{selStock.length > 1 ? ` (${selStock.length})` : ""}</button>}
           <span className="opacity-70">Asignar a:</span>
           {cat?.stores.map((x) => <button key={x.id} onClick={() => assign(x.id)} className="rounded-lg px-3 py-1.5 text-xs font-bold" style={{ background: x.color }}>{x.name}</button>)}
           <button onClick={() => assign(0)} className="rounded-lg bg-slate-500 px-3 py-1.5 text-xs font-bold">Almacén general</button>
@@ -247,6 +252,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           </table>
         </div>
       </div>
+      {selling && cat && <MarkSoldModal items={selStock} stores={cat.stores} defaultStore={selStores.length === 1 && selStores[0] > 0 ? selStores[0] : null} onClose={() => setSelling(false)} onDone={() => { setSelling(false); setSel(new Set()); load(); }} />}
       {importing && <ImportModal onClose={() => setImporting(false)} onDone={load} />}
       {edit && cat && <EditModal p={edit} stores={[{ id: 0, name: "Almacén general" }, ...cat.stores]} onClose={() => setEdit(null)} onDone={() => { setEdit(null); load(); }} />}
     </div>
