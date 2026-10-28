@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, Loader2, X } from "lucide-react";
 import { api } from "@/lib/client";
 import { METHODS, limaToday } from "@/lib/format";
+import NumInput from "./NumInput";
 
 type Seller = { id: number; name: string; role: string; active: number };
 
@@ -86,12 +87,12 @@ export default function MarkSoldModal({ items, stores, defaultStore, onClose, on
                 <div><label className="label">Fecha de venta</label><input type="date" className="input" max={limaToday()} value={date} onChange={(e) => setDate(e.target.value)} /></div>
                 <div><label className="label">Vendedora</label>
                   <select className="input" value={seller} onChange={(e) => setSeller(e.target.value)}><option value="">Sin especificar</option>{sellers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select></div>
-                <div><label className="label">Precio {items.length > 1 ? "por equipo " : ""}(S/)</label><input inputMode="decimal" className="input" placeholder="Vacío = solo marcar" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                <div><label className="label">Precio {items.length > 1 ? "por equipo " : ""}(S/)</label><NumInput decimal prefix="S/" className="input" title="Precio de venta (S/)" placeholder="Vacío = solo marcar" value={price} onChange={setPrice} /></div>
                 <div><label className="label">Medio de pago</label>
                   <select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
                 <div className="sm:col-span-2"><label className="label">Cliente</label><input className="input" placeholder="Cliente varios" value={customer} onChange={(e) => setCustomer(e.target.value)} /></div>
-                <div><label className="label">DNI</label><input inputMode="numeric" className="input" value={dni} onChange={(e) => setDni(e.target.value)} /></div>
-                <div><label className="label">Celular</label><input inputMode="numeric" className="input" value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+                <div><label className="label">DNI</label><NumInput className="input" title="DNI" maxLen={12} placeholder="DNI" value={dni} onChange={setDni} /></div>
+                <div><label className="label">Celular</label><NumInput className="input" title="Celular" maxLen={12} placeholder="Celular" value={phone} onChange={setPhone} /></div>
                 <p className="text-xs text-slate-400 sm:col-span-2">Si pones un precio, se crea la venta con su constancia y entra a los reportes. Si lo dejas vacío, el equipo solo pasa a “Vendido” con una nota.</p>
               </div>
             )}

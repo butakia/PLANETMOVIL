@@ -25,7 +25,8 @@ export async function POST(req: NextRequest) {
   const c = await db();
   const tx = await c.transaction("write");
   try {
-    let sellerId = g.user.id, sellerName = g.user.name;
+    // La administración no figura como vendedora: sin nombre se usa "Vendedora 1/2/3" al azar.
+    let sellerId: number | null = null, sellerName = `Vendedora ${1 + Math.floor(Math.random() * 3)}`;
     if (b.seller_id) {
       const u = (await tx.execute({ sql: "SELECT id,name FROM users WHERE id=?", args: [Number(b.seller_id)] })).rows[0];
       if (u) { sellerId = Number(u.id); sellerName = String(u.name); }

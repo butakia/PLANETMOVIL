@@ -128,6 +128,17 @@ async function migrate(c: Client) {
   await backfillSalePrice(c);
   await moveCode1528(c);
   await trainingPhones(c);
+  await anonymizeAdminSales(c);
+}
+
+// Una sola vez: las ventas hechas con usuarios de administración (Omar, Rosa…) pasan a "Vendedora 1/2/3" al azar.
+async function anonymizeAdminSales(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='anon_admin_v1'")).rows.length) return;
+  await c.batch([
+    { sql: "UPDATE sales SET seller_name='Vendedora '||(1+abs(random())%3), seller_id=NULL WHERE seller_id IN (SELECT id FROM users WHERE role<>'seller')", args: [] },
+    { sql: "UPDATE products SET seller='Vendedora '||(1+abs(random())%3) WHERE seller IN (SELECT name FROM users WHERE role<>'seller')", args: [] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('anon_admin_v1','1')", args: [] },
+  ], "write");
 }
 
 // Una sola vez: el 1528 vuelve a Soluciones Móviles.

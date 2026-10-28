@@ -63,6 +63,15 @@ export async function POST(req: NextRequest) {
   try {
     const price = Number(b.price);
     if (!(price > 0)) throw new Error("Ingresa el monto de la venta");
+    // Omar y Rosa (administración) no figuran como vendedoras: si cobran, sale el nombre elegido o "Vendedora 1/2/3" al azar.
+    let sellerId: number | null = g.user.id, sellerName = g.user.name;
+    if (g.user.role === "admin") {
+      sellerId = null; sellerName = `Vendedora ${1 + Math.floor(Math.random() * 3)}`;
+      if (b.seller_id) {
+        const u = (await tx.execute({ sql: "SELECT id,name FROM users WHERE id=? AND role='seller'", args: [Number(b.seller_id)] })).rows[0];
+        if (u) { sellerId = Number(u.id); sellerName = String(u.name); }
+      }
+    }
     const payments = (b.payments as { method: string; amount: number }[]).filter((x) => Number(x.amount) > 0);
     const paid = payments.reduce((s, x) => s + Number(x.amount), 0);
     if (!payments.length || Math.abs(paid - price) > 0.01) throw new Error(`Los pagos (S/ ${paid.toFixed(2)}) no suman el monto (S/ ${price.toFixed(2)})`);
@@ -125,7 +134,7 @@ export async function POST(req: NextRequest) {
     const ins = await tx.execute({
       sql: `INSERT INTO sales (store_id,seq,number,product_id,seller_id,seller_name,item,qty,price,suggested,cost,customer_name,phone,dni,modified,day,status,late,manual)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-      args: [storeId, seq, number, p?.id ?? null, g.user.id, g.user.name, JSON.stringify(item), qty, price, p?.price_suggested ?? null,
+      args: [storeId, seq, number, p?.id ?? null, sellerId, sellerName, JSON.stringify(item), qty, price, p?.price_suggested ?? null,
         p && p.cost !== null && p.cost !== undefined ? Number(p.cost) * qty : null, clean(b.customer_name) ?? "Cliente varios", clean(b.phone), clean(b.dni),
         changed.length ? JSON.stringify(changes) : null, day, late ? "pending" : "ok", late ? 1 : 0, p || b.accessory || b.service ? 0 : 1],
     });
@@ -135,18 +144,18 @@ export async function POST(req: NextRequest) {
     if (p && !late) {
       if (p.store_id !== storeId) {
         await tx.execute({ sql: "UPDATE products SET store_id=? WHERE id=?", args: [storeId, p.id] });
-        await tx.execute({ sql: "INSERT INTO movements (product_id,from_store,to_store,user_name) VALUES (?,?,?,?)", args: [p.id, p.store_id, storeId, g.user.name] });
+        await tx.execute({ sql: "INSERT INTO movements (product_id,from_store,to_store,user_name) VALUES (?,?,?,?)", args: [p.id, p.store_id, storeId, sellerName] });
       }
       const left = p.qty - qty;
-      await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=?, sale_price=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? g.user.name : null, left <= 0 ? price / qty : null, p.id] });
+      await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=?, sale_price=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? sellerName : null, left <= 0 ? price / qty : null, p.id] });
     }
 
     const noStock = !p && !b.accessory && !b.service;
     const desc = [qty > 1 && item.kind === "accesorio" ? `${qty}×` : "", item.model, item.technician ? `(técnico: ${item.technician})` : "", item.ram ? `${item.ram}GB RAM` : "", item.storage ? `${item.storage}GB` : ""].filter(Boolean).join(" ");
     const [yy, mm, dd] = day.split("-");
-    let type = "venta", flagged = 0, message = `${g.user.name} vendió ${desc} por S/ ${price.toFixed(2)} en ${store.name}`;
-    if (late) { type = "venta_tardia"; flagged = 1; message = `${g.user.name} registró una venta FUERA DE TIEMPO del ${dd}/${mm}/${yy}: ${desc} por S/ ${price.toFixed(2)} en ${store.name}${noStock ? " (equipo no registrado en stock)" : ""}. Pendiente de tu aprobación.`; }
-    else if (backdated) { type = "venta_fecha_anterior"; flagged = 1; message = `${g.user.name} registró un servicio con fecha anterior (${dd}/${mm}/${yy}): ${desc} por S/ ${price.toFixed(2)} en ${store.name}.`; }
+    let type = "venta", flagged = 0, message = `${sellerName} vendió ${desc} por S/ ${price.toFixed(2)} en ${store.name}`;
+    if (late) { type = "venta_tardia"; flagged = 1; message = `${sellerName} registró una venta FUERA DE TIEMPO del ${dd}/${mm}/${yy}: ${desc} por S/ ${price.toFixed(2)} en ${store.name}${noStock ? " (equipo no registrado en stock)" : ""}. Pendiente de tu aprobación.`; }
+    else if (backdated) { type = "venta_fecha_anterior"; flagged = 1; message = `${sellerName} registró un servicio con fecha anterior (${dd}/${mm}/${yy}): ${desc} por S/ ${price.toFixed(2)} en ${store.name}.`; }
     else if (noStock) { type = "venta_manual"; flagged = 1; message += " — equipo NO registrado en stock (venta manual)"; }
     else if (changed.length) { type = "venta_modificada"; flagged = 1; message += ` — con ${changed.length} corrección(es): ${changed.map((k) => `${k}: ${changes[k].from ?? "—"} → ${changes[k].to ?? "—"}`).join(", ")}`; }
     await tx.execute({ sql: "INSERT INTO alerts (type,message,sale_id,store_id,flagged) VALUES (?,?,?,?,?)", args: [type, message, saleId, storeId, flagged] });
@@ -156,7 +165,7 @@ export async function POST(req: NextRequest) {
       head + " " + number,
       String(desc),
       "S/ " + price.toFixed(2) + " — " + payments.map((x) => x.method + " " + Number(x.amount).toFixed(2)).join(" + "),
-      store.name + " · " + g.user.name,
+      store.name + " · " + sellerName,
       ...(changed.length ? ["⚠ Datos corregidos: " + changed.map((k) => k + ": " + (changes[k].from ?? "—") + " → " + (changes[k].to ?? "—")).join(", ")] : []),
       ...(late ? ["Pendiente de tu aprobación (venta del " + dd + "/" + mm + "/" + yy + ")"] : []),
     ].join("\n");

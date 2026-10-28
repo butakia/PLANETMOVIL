@@ -11,6 +11,7 @@ import NumPad from "./NumPad";
 import SimpleAccessory, { accessoryName, type Accessory } from "./SimpleAccessory";
 import ServiceFields, { type Service } from "./ServiceFields";
 import SaleSuccess from "./SaleSuccess";
+import NumInput from "./NumInput";
 import { playSuccess } from "@/lib/sound";
 
 type P = {
@@ -29,6 +30,9 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const [svc, setSvc] = useState<Service>({ technician: "", detail: "", date: limaToday() });
   const [tTo, setTTo] = useState<number>(user.store_id ?? 1);
   const [success, setSuccess] = useState(false);
+  const [sellerPick, setSellerPick] = useState("");
+  const [sellerList, setSellerList] = useState<{ id: number; name: string }[]>([]);
+  useEffect(() => { if (user.role === "admin") api<{ users: { id: number; name: string; role: string; active: number }[] }>("/api/users").then((r) => setSellerList(r.users.filter((u) => u.role === "seller" && u.active))).catch(() => {}); }, [user.role]);
   const [code, setCode] = useState("");
   const [matches, setMatches] = useState<P[]>([]);
   const [p, setP] = useState<P | null>(null);
@@ -142,7 +146,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       changes.forEach((k) => (edits[k] = fields[k] === "" ? null : fields[k]));
       const r = await api<{ id: number }>("/api/sales", {
         body: {
-          product_id: p?.id, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
+          product_id: p?.id, seller_id: sellerPick || undefined, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
           manual: manual ? { ...fields, store_id: mStore } : undefined,
           accessory: acc ? { name: accessoryName(acc), detail: acc.detail.trim(), store_id: mStore, category: acc.category } : undefined,
           service: isSvc ? { technician: svc.technician.trim(), detail: svc.detail.trim(), store_id: mStore } : undefined, ...(isSvc && svc.date ? { sale_date: svc.date } : {}),
@@ -303,15 +307,15 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
                     <input className={inputCls("model")} list="models-list" value={fields.model ?? ""} onChange={(e) => setFields({ ...fields, model: e.target.value })} placeholder="Ej. Samsung A15" />
                     <datalist id="models-list">{cat?.models.map((m) => <option key={m.name} value={m.name} />)}</datalist></div>
                   {(manual || p?.kind === "celular") && <>
-                    <div><label className="label">RAM (GB)</label><input className={inputCls("ram")} inputMode="numeric" value={fields.ram ?? ""} onChange={(e) => setFields({ ...fields, ram: e.target.value })} /></div>
-                    <div><label className="label">Almacenamiento (GB)</label><input className={inputCls("storage")} inputMode="numeric" value={fields.storage ?? ""} onChange={(e) => setFields({ ...fields, storage: e.target.value })} /></div>
+                    <div><label className="label">RAM (GB)</label><NumInput className={inputCls("ram")} title="RAM (GB)" maxLen={3} value={fields.ram ?? ""} onChange={(v) => setFields({ ...fields, ram: v })} /></div>
+                    <div><label className="label">Almacenamiento (GB)</label><NumInput className={inputCls("storage")} title="Almacenamiento (GB)" maxLen={4} value={fields.storage ?? ""} onChange={(v) => setFields({ ...fields, storage: v })} /></div>
                   </>}
                   <div><label className="label">Color</label><input className={inputCls("color")} list="colors-list" value={fields.color ?? ""} onChange={(e) => setFields({ ...fields, color: e.target.value })} />
                     <datalist id="colors-list">{cat?.colors.map((c) => <option key={c.name} value={c.name} />)}</datalist></div>
                   {(manual || p?.kind === "celular") && <>
                     <div><label className="label">Caja</label><select className={inputCls("condition")} value={fields.condition ?? ""} onChange={(e) => setFields({ ...fields, condition: e.target.value })}><option value="">—</option><option value="Sellado">Caja sellada</option><option value="Abierto">Caja abierta</option></select></div>
-                    <div><label className="label">IMEI 1</label><input className={inputCls("imei1")} inputMode="numeric" value={fields.imei1 ?? ""} onChange={(e) => setFields({ ...fields, imei1: e.target.value })} /></div>
-                    <div><label className="label">IMEI 2</label><input className={inputCls("imei2")} inputMode="numeric" value={fields.imei2 ?? ""} onChange={(e) => setFields({ ...fields, imei2: e.target.value })} /></div>
+                    <div><label className="label">IMEI 1</label><NumInput className={inputCls("imei1")} title="IMEI 1" maxLen={16} value={fields.imei1 ?? ""} onChange={(v) => setFields({ ...fields, imei1: v })} /></div>
+                    <div><label className="label">IMEI 2</label><NumInput className={inputCls("imei2")} title="IMEI 2" maxLen={16} value={fields.imei2 ?? ""} onChange={(v) => setFields({ ...fields, imei2: v })} /></div>
                   </>}
                   {manual && <div><label className="label">Código interno (opcional)</label><input className="input" value={fields.code ?? ""} onChange={(e) => setFields({ ...fields, code: e.target.value })} /></div>}
                   {manual && user.role === "admin" && cat && <div><label className="label">Tienda</label><select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>}
@@ -330,10 +334,20 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
           {/* 2. Cobro */}
           <div className="card anim-pop space-y-4 p-4 sm:p-5">
             <div className="label !mb-0">2 · Cobro</div>
+            {user.role === "admin" && (
+              <div>
+                <label className="label">¿Qué vendedora hizo la venta?</label>
+                <select className="input" value={sellerPick} onChange={(e) => setSellerPick(e.target.value)}>
+                  <option value="">Sin nombre (sale “Vendedora 1, 2 o 3” al azar)</option>
+                  {sellerList.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}
+                </select>
+                <p className="mt-1 text-xs text-slate-400">La administración no aparece como vendedora en los reportes; el monto sí suma.</p>
+              </div>
+            )}
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <label className="label">Monto de la venta (S/)</label>
-                <input type="number" inputMode="decimal" className="input !py-3.5 text-2xl font-extrabold" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="0.00" />
+                <NumInput decimal big prefix="S/" className="input !py-3.5" title="Monto de la venta (S/)" value={price} onChange={setPrice} placeholder="0.00" />
                 {p?.price_suggested ? <button onClick={() => setPrice(String(p.price_suggested))} className="mt-1 text-xs font-semibold text-brand-600">Precio sugerido: {soles(p.price_suggested)}</button> : null}
               </div>
               {((p?.kind === "accesorio" && p.qty > 1) || acc) && (
@@ -357,7 +371,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
                     <label key={m} className="flex items-center gap-3">
                       <span className="w-32 text-sm font-semibold">{m}</span>
                       <div className="relative flex-1"><span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm text-slate-400">S/</span>
-                        <input type="number" inputMode="decimal" className="input !py-3 pl-9 text-lg font-bold" placeholder="0.00" value={amt[m] ?? ""} onChange={(e) => setAmtFor(m, e.target.value)} /></div>
+                        <NumInput decimal className="input !py-3 pl-9 text-lg font-bold" title={`Pagó con ${m} (S/)`} placeholder="0.00" value={amt[m] ?? ""} onChange={(v) => setAmtFor(m, v)} /></div>
                     </label>
                   ))}
                   <p className={`text-sm font-semibold ${Math.abs(remaining) < 0.01 ? "text-emerald-600" : "text-rose-600"}`}>{Math.abs(remaining) < 0.01 ? "Pagos completos ✓" : remaining > 0 ? `Faltan ${soles(remaining)}` : `Sobran ${soles(-remaining)}`}</p>
@@ -375,8 +389,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             <div className="label !mb-0">3 · Cliente (opcional)</div>
             <input className="input" placeholder="Nombre del cliente" value={customer} onChange={(e) => setCustomer(e.target.value)} />
             <div className="grid grid-cols-2 gap-3">
-              <input className="input" inputMode="tel" placeholder="Celular" value={phone} onChange={(e) => setPhone(e.target.value)} />
-              <input className="input" inputMode="numeric" placeholder="DNI" value={dni} onChange={(e) => setDni(e.target.value)} />
+              <NumInput className="input" title="Celular del cliente" placeholder="Celular" maxLen={12} value={phone} onChange={setPhone} />
+              <NumInput className="input" title="DNI del cliente" placeholder="DNI" maxLen={12} value={dni} onChange={setDni} />
             </div>
           </div>
 

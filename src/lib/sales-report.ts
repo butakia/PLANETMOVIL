@@ -6,7 +6,7 @@ export type SaleRow = {
   customer_name: string | null; price: number; item: { kind: string; model: string; imei1?: string | null; code?: string | null; technician?: string | null };
   payments: { method: string; amount: number }[];
 };
-export type SalesMeta = { title: string; period: string; filters: string[]; storeColor: (id: number) => string };
+export type SalesMeta = { title: string; period: string; filters: string[]; storeColor: (id: number) => string; tag?: string };
 
 const NAVY = "#1e3a8a";
 const PAY_COLORS: Record<string, string> = { Efectivo: "#059669", Yape: "#7c3aed", Plin: "#0891b2", Transferencia: "#2563eb" };
@@ -140,5 +140,5 @@ export async function downloadSalesPdf(allRows: SaleRow[], meta: SalesMeta) {
     doc.text(`${meta.title}  ·  ${nowLabel()}`, M, H - 4.5);
     doc.text(`Página ${i} de ${pages}`, W - M, H - 4.5, { align: "right" });
   }
-  doc.save(`reporte-ventas-${meta.period.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "")}.pdf`);
+  doc.save(`reporte-ventas${meta.tag ? "-" + meta.tag.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : ""}-${meta.period.replace(/[^\d]+/g, "-").replace(/^-|-$/g, "")}.pdf`);
 }

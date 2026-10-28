@@ -31,18 +31,34 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
   const [open, setOpen] = useState<number | null>(null);
   const [msg, setMsg] = useState("");
   const [making, setMaking] = useState(false);
+  const [menu, setMenu] = useState(false);
+  const [scope, setScope] = useState(""); // "" = todas las tiendas juntas · "each" = un PDF por tienda · id = una tienda
   async function pdf() {
+    setMenu(false);
     setMaking(true);
     try {
       const { downloadSalesPdf } = await import("@/lib/sales-report");
-      const storeName = store ? cat?.stores.find((x) => String(x.id) === store)?.name : "";
-      const filters = [storeName && `Tienda: ${storeName}`, seller && `Vendedora: ${users.find((u) => String(u.id) === seller)?.name ?? ""}`, method && `Medio de pago: ${method}`, status && `Estado: ${({ ok: "válidas", pending: "por aprobar", rejected: "rechazadas" } as Record<string, string>)[status] ?? status}`, q && `Búsqueda: "${q}"`].filter(Boolean) as string[];
-      await downloadSalesPdf(rows as never, {
-        title: "Reporte de ventas",
-        period: from === to ? `Ventas del ${fmtDay(from)}` : `Ventas del ${fmtDay(from)} al ${fmtDay(to)}`,
-        filters,
-        storeColor: (id: number) => cat?.stores.find((x) => x.id === id)?.color ?? "#64748b",
-      });
+      const nameOf = (id: string) => cat?.stores.find((x) => String(x.id) === id)?.name ?? "";
+      const targets = scope === "each" ? (cat?.stores.map((x) => String(x.id)) ?? []) : [scope];
+      let made = 0;
+      for (const target of targets) {
+        const sp = new URLSearchParams({ from, to });
+        if (q) sp.set("q", q); if (seller) sp.set("seller", seller); if (method) sp.set("method", method); if (status) sp.set("status", status);
+        if (target) sp.set("store", target);
+        const data = (await api<{ sales: S[] }>(`/api/sales?${sp}`)).sales;
+        if (scope === "each" && data.length === 0) continue;
+        const filters = [target ? `Tienda: ${nameOf(target)}` : "Todas las tiendas", seller && `Vendedora: ${users.find((u) => String(u.id) === seller)?.name ?? ""}`, method && `Medio de pago: ${method}`, status && `Estado: ${({ ok: "válidas", pending: "por aprobar", rejected: "rechazadas" } as Record<string, string>)[status] ?? status}`, q && `Búsqueda: "${q}"`].filter(Boolean) as string[];
+        await downloadSalesPdf(data as never, {
+          title: target ? `Reporte de ventas · ${nameOf(target)}` : "Reporte de ventas",
+          period: from === to ? `Ventas del ${fmtDay(from)}` : `Ventas del ${fmtDay(from)} al ${fmtDay(to)}`,
+          filters,
+          tag: target ? nameOf(target) : "todas-las-tiendas",
+          storeColor: (id: number) => cat?.stores.find((x) => x.id === id)?.color ?? "#64748b",
+        });
+        made++;
+        if (scope === "each") await new Promise((r) => setTimeout(r, 600));
+      }
+      if (made === 0) alert("No hay ventas para descargar en ese periodo.");
     } finally { setMaking(false); }
   }
 
@@ -74,10 +90,27 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
           <p className="text-sm text-slate-500"><b className="text-slate-800">{valid.length}</b> ventas · <b className="text-slate-800">{soles(total)}</b>{pending.length > 0 && <span className="ml-2 font-semibold text-amber-700">· {pending.length} pendiente(s) de aprobación</span>}</p></div>
         <div className="flex gap-2">
           {role === "seller" && <Link href="/vender" className="btn-primary">Ingresar venta</Link>}
-          <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700" disabled={making || rows.length === 0} onClick={pdf}>{making ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} Reporte PDF</button>
-          <button className="btn-ghost" onClick={() => downloadCSV(`ventas-${from}_${to}.csv`, [["N°", "Fecha", "Hora", "Estado", "Tienda", "Vendedora", "Equipo", "IMEI", "Cód.", "Cliente", "DNI", "Celular", "Monto", "Pagos"],
+          {role === "admin" && (
+            <div className="relative">
+              <button className="btn-primary !bg-emerald-600 hover:!bg-emerald-700" disabled={making} onClick={() => setMenu(!menu)}>{making ? <Loader2 className="h-4 w-4 animate-spin" /> : <FileText className="h-4 w-4" />} {making ? "Preparando…" : "Reporte PDF"}</button>
+              {menu && (
+                <div className="anim-pop absolute right-0 z-30 mt-2 w-72 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                  <div className="mb-1.5 text-[11px] font-bold uppercase text-slate-400">¿De qué tiendas?</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[["", "Todas juntas"], ["each", "Cada una por separado"], ...(cat?.stores.map((x) => [String(x.id), x.name]) ?? [])].map(([id, name]) => (
+                      <button key={id} onClick={() => setScope(id)} className={`chip !px-2.5 !py-1 text-xs ${scope === id ? "chip-on" : ""}`}>{name}</button>
+                    ))}
+                  </div>
+                  {scope === "each" && <p className="mt-1.5 text-[11px] text-amber-700">Se descargará un PDF por tienda (el navegador puede pedir permiso para varias descargas).</p>}
+                  <p className="mt-2 text-[11px] text-slate-400">Usa el periodo y los filtros de arriba.</p>
+                  <button onClick={pdf} className="btn-primary mt-2 w-full !bg-emerald-600 py-2.5 hover:!bg-emerald-700"><Download className="h-4 w-4" /> Descargar PDF</button>
+                </div>
+              )}
+            </div>
+          )}
+          {role === "admin" && <button className="btn-ghost" onClick={() => downloadCSV(`ventas-${from}_${to}.csv`, [["N°", "Fecha", "Hora", "Estado", "Tienda", "Vendedora", "Equipo", "IMEI", "Cód.", "Cliente", "DNI", "Celular", "Monto", "Pagos"],
             ...rows.map((s) => [s.number, fmtDay(s.day), fmtTime(s.created_at), s.status === "ok" ? "Válida" : s.status === "pending" ? "Pendiente" : "Rechazada", s.store_name, s.seller_name, s.item.model, s.item.imei1, s.item.code, s.customer_name, s.dni, s.phone, s.price, s.payments.map((p: S) => `${p.method} ${p.amount}`).join(" + ")])])}>
-            <Download className="h-4 w-4" /> CSV</button>
+            <Download className="h-4 w-4" /> CSV</button>}
         </div>
       </div>
 
@@ -89,7 +122,7 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
         </div>
         {role !== "seller" && (
           <div className="flex flex-wrap gap-2">
-            <select className="input !w-auto !py-1.5" value={store} onChange={(e) => setStore(e.target.value)}><option value="">Ambas tiendas</option>{cat?.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
+            <select className="input !w-auto !py-1.5" value={store} onChange={(e) => setStore(e.target.value)}><option value="">Todas las tiendas</option>{cat?.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select>
             <select className="input !w-auto !py-1.5" value={seller} onChange={(e) => setSeller(e.target.value)}><option value="">Todas las vendedoras</option>{users.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
             <select className="input !w-auto !py-1.5" value={method} onChange={(e) => setMethod(e.target.value)}><option value="">Todo medio de pago</option>{METHODS.map((m) => <option key={m}>{m}</option>)}</select>
             <select className="input !w-auto !py-1.5" value={status} onChange={(e) => setStatus(e.target.value)}><option value="">Todas</option><option value="ok">Válidas</option><option value="pending">Por aprobar</option><option value="rejected">Rechazadas</option></select>

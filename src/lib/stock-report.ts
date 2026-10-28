@@ -13,8 +13,11 @@ export type ReportMeta = {
   brandColor: (brand: string | null) => string;
   /** false = informe solo con lo disponible (sin vendidos). Los incautados nunca salen en el reporte. */
   includeSold?: boolean;
+  /** Texto para el nombre del archivo (por ejemplo la tienda). */
+  tag?: string;
 };
 
+const tagOf = (m: ReportMeta) => (m.tag ? "-" + m.tag.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") : "");
 const forReport = (rows: ReportRow[], meta: ReportMeta) => rows.filter((r) => r.status !== "incautado" && (meta.includeSold !== false || r.status !== "sold"));
 
 const NAVY = "#1e3a8a";
@@ -179,7 +182,7 @@ export async function downloadStockPdf(allRows: ReportRow[], meta: ReportMeta) {
     doc.text(`${meta.title}  ·  ${nowLabel()}`, M, H - 4.5);
     doc.text(`Página ${i} de ${pages}`, W - M, H - 4.5, { align: "right" });
   }
-  doc.save(meta.includeSold === false ? `informe-stock-sin-vendidos-${fileStamp()}.pdf` : `reporte-stock-con-vendidos-${fileStamp()}.pdf`);
+  doc.save(`${meta.includeSold === false ? "informe-stock-sin-vendidos" : "reporte-stock-con-vendidos"}${tagOf(meta)}-${fileStamp()}.pdf`);
 }
 
 /* ───────────── Excel ───────────── */
@@ -274,5 +277,5 @@ export async function downloadStockXlsx(allRows: ReportRow[], meta: ReportMeta) 
   ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: cols.length } };
 
   const buf = await wb.xlsx.writeBuffer();
-  save(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `stock-${fileStamp()}.xlsx`);
+  save(new Blob([buf], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" }), `stock${tagOf(meta)}-${fileStamp()}.xlsx`);
 }

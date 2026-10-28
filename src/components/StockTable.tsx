@@ -8,6 +8,7 @@ import { useCatalog } from "./useCatalog";
 import ImportModal from "./ImportModal";
 import DuplicateImei from "./DuplicateImei";
 import MarkSoldModal from "./MarkSoldModal";
+import NumInput from "./NumInput";
 import QuickSoldModal from "./QuickSoldModal";
 
 type P = {
@@ -31,6 +32,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [codeQ, setCodeQ] = useState("");
   const [letters, setLetters] = useState(false);
   const [dl, setDl] = useState(false);
+  const [scope, setScope] = useState<string>("");
   const [selling, setSelling] = useState(false);
   const [quick, setQuick] = useState(false);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
@@ -109,27 +111,40 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
     try {
       const { downloadStockPdf, downloadStockXlsx } = await import("@/lib/stock-report");
       const withSold = what === "pdf_con" || (what === "xlsx" && (status === "sold" || status === "all" || status === "incautado" || status === "rapido"));
-      const data = (await api<{ products: P[] }>(`/api/products?${buildParams(withSold ? "all" : "stock")}`)).products;
-      const storeName = store === "" ? "" : store === "0" ? "Almacén general" : cat?.stores.find((s) => String(s.id) === store)?.name ?? "";
-      const filters = [
-        storeName && `Tienda: ${storeName}`,
-        withSold ? "Incluye vendidos" : "Solo equipos disponibles (sin vendidos)",
-        brand && `Marca: ${brand}`,
-        kind_() && `Tipo: ${kind_()}`,
-        q && `Búsqueda: "${q}"`,
-        f.ram && `RAM: ${f.ram} GB`,
-        f.storage && `Almacenamiento: ${storageLabel(Number(f.storage))}`,
-        f.color && `Color: ${f.color}`,
-        `Orden: ${SORT_NAMES[sort]}`,
-      ].filter(Boolean) as string[];
-      const meta = {
-        title: withSold ? "Reporte de stock" : "Informe de stock disponible",
-        filters,
-        includeSold: withSold,
-        storeColor: (id: number) => (id === 0 ? "#475569" : cat?.stores.find((s) => s.id === id)?.color ?? "#64748b"),
-        brandColor: (b: string | null) => brandColor(b),
-      };
-      if (what === "xlsx") await downloadStockXlsx(data, meta); else await downloadStockPdf(data, meta);
+      const nameOf = (id: string) => (id === "0" ? "Almacén general" : cat?.stores.find((s) => String(s.id) === id)?.name ?? "");
+      // "each" = un archivo por cada tienda; si no, un solo archivo (todas las tiendas o la elegida).
+      const targets = scope === "each" ? ["0", ...(cat?.stores.map((s) => String(s.id)) ?? [])] : [scope];
+      let made = 0;
+      for (const target of targets) {
+        const sp = buildParams(withSold ? "all" : "stock");
+        sp.delete("store"); if (target) sp.set("store", target);
+        const data = (await api<{ products: P[] }>(`/api/products?${sp}`)).products;
+        if (scope === "each" && data.filter((r) => r.status !== "incautado").length === 0) continue;
+        const filters = [
+          target ? `Tienda: ${nameOf(target)}` : "Todas las tiendas",
+          withSold ? "Incluye vendidos" : "Solo equipos disponibles (sin vendidos)",
+          brand && `Marca: ${brand}`,
+          kind_() && `Tipo: ${kind_()}`,
+          q && `Búsqueda: "${q}"`,
+          f.ram && `RAM: ${f.ram} GB`,
+          f.storage && `Almacenamiento: ${storageLabel(Number(f.storage))}`,
+          f.color && `Color: ${f.color}`,
+          `Orden: ${SORT_NAMES[sort]}`,
+        ].filter(Boolean) as string[];
+        const base = withSold ? "Reporte de stock" : "Informe de stock disponible";
+        const meta = {
+          title: target ? `${base} · ${nameOf(target)}` : base,
+          filters,
+          includeSold: withSold,
+          tag: target ? nameOf(target) : "todas-las-tiendas",
+          storeColor: (id: number) => (id === 0 ? "#475569" : cat?.stores.find((s) => s.id === id)?.color ?? "#64748b"),
+          brandColor: (b: string | null) => brandColor(b),
+        };
+        if (what === "xlsx") await downloadStockXlsx(data, meta); else await downloadStockPdf(data, meta);
+        made++;
+        if (scope === "each") await new Promise((r) => setTimeout(r, 600));
+      }
+      if (scope === "each" && made === 0) alert("No hay equipos para descargar con esos filtros.");
     } finally { setMaking(""); }
   }  const kind_ = () => (kind === "celular" ? "celulares" : kind === "accesorio" ? "accesorios" : "");
 
@@ -151,12 +166,22 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           {role === "admin" && <Link href="/stock/editar" className="btn-primary !bg-amber-500 hover:!bg-amber-600"><Pencil className="h-4 w-4" /> Editar</Link>}
           {role === "admin" && <button onClick={() => setQuick(true)} className="btn-ghost !border-emerald-300 !text-emerald-700"><Plus className="h-4 w-4" /> Subir vendidos</button>}
           {role === "admin" && <button onClick={() => setImporting(true)} className="btn-ghost"><Upload className="h-4 w-4" /> Importar hoja</button>}
-          <div className="relative">
+          {role === "admin" && <div className="relative">
             <button onClick={() => setDl(!dl)} disabled={!!making} className="btn-ghost">
               {making ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {making ? "Preparando…" : "Descargar reporte"}
             </button>
             {dl && (
-              <div className="anim-pop absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+              <div className="anim-pop absolute right-0 z-30 mt-2 w-72 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                <div className="px-2 pb-2 pt-1">
+                  <div className="mb-1.5 text-[11px] font-bold uppercase text-slate-400">¿De qué tiendas?</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {[["", "Todas juntas"], ["each", "Cada una por separado"], ["0", "Almacén"], ...(cat?.stores.map((s) => [String(s.id), s.name]) ?? [])].map(([id, name]) => (
+                      <button key={id} onClick={() => setScope(id)} className={`chip !px-2.5 !py-1 text-xs ${scope === id ? "chip-on" : ""}`}>{name}</button>
+                    ))}
+                  </div>
+                  {scope === "each" && <p className="mt-1.5 text-[11px] text-amber-700">Se descargará un archivo por tienda (el navegador puede pedir permiso para varias descargas).</p>}
+                </div>
+                <div className="mb-1 border-t border-slate-100" />
                 {[["pdf_con", "PDF con vendidos", "Reporte completo: disponibles y vendidos", FileText], ["pdf_sin", "PDF informe sin vendidos", "Solo lo que hay disponible hoy", FileText], ["xlsx", "Excel con colores", "Resumen + hoja de stock con filtros", FileSpreadsheet], ["csv", "CSV simple", "Solo datos, sin formato", Download]].map(([k, t, d, Icon]) => {
                   const I = Icon as typeof Download;
                   return (
@@ -168,7 +193,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                 })}
               </div>
             )}
-          </div>
+          </div>}
           {role === "admin" && <Link href="/stock/nuevo" className="btn-primary"><Plus className="h-4 w-4" /> Ingresar</Link>}
         </div>
       </div>
@@ -216,8 +241,8 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
             <div><label className="label">Caja</label><select className="input" value={f.condition} onChange={(e) => setF({ ...f, condition: e.target.value })}><option value="">Todas</option><option value="Sellado">Sellada</option><option value="Abierto">Abierta</option></select></div>
             <div><label className="label">Ingresó desde</label><input type="date" className="input" value={f.from} onChange={(e) => setF({ ...f, from: e.target.value })} /></div>
             <div><label className="label">Ingresó hasta</label><input type="date" className="input" value={f.to} onChange={(e) => setF({ ...f, to: e.target.value })} /></div>
-            <div><label className="label">Precio desde (S/)</label><input type="number" className="input" value={f.pmin} onChange={(e) => setF({ ...f, pmin: e.target.value })} /></div>
-            <div><label className="label">Precio hasta (S/)</label><input type="number" className="input" value={f.pmax} onChange={(e) => setF({ ...f, pmax: e.target.value })} /></div>
+            <div><label className="label">Precio desde (S/)</label><NumInput decimal className="input" title="Precio desde (S/)" value={f.pmin} onChange={(v) => setF({ ...f, pmin: v })} /></div>
+            <div><label className="label">Precio hasta (S/)</label><NumInput decimal className="input" title="Precio hasta (S/)" value={f.pmax} onChange={(v) => setF({ ...f, pmax: v })} /></div>
             <label className="flex items-center gap-2 text-sm font-medium text-slate-600"><input type="checkbox" className="accent-blue-700" checked={!!f.noprice} onChange={(e) => setF({ ...f, noprice: e.target.checked ? "1" : "" })} /> Solo sin precio sugerido</label>
             {activeAdv > 0 && <button className="btn-ghost !py-1.5 text-xs sm:col-start-4" onClick={() => setF({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" })}>Limpiar filtros</button>}
           </div>
@@ -227,11 +252,11 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
       {role === "admin" && sel.size > 0 && (
         <div className="anim-pop sticky top-2 z-20 flex flex-wrap items-center gap-3 rounded-2xl bg-blue-900 p-3 text-sm font-semibold text-white shadow-xl">
           <span>{sel.size} seleccionado{sel.size > 1 ? "s" : ""}</span>
-          {oneSel && oneSel.kind === "accesorio" && oneSel.qty > 1 && <input type="number" min={1} max={oneSel.qty - 1} placeholder={"cuántas de " + oneSel.qty} className="w-32 rounded-lg px-2 py-1 text-slate-900" value={aqty} onChange={(e) => setAqty(e.target.value)} />}
+          {oneSel && oneSel.kind === "accesorio" && oneSel.qty > 1 && <NumInput maxLen={3} placeholder={"cuántas de " + oneSel.qty} title={"Cuántas de " + oneSel.qty} className="w-36 rounded-lg bg-white px-2 py-1 text-slate-900" value={aqty} onChange={setAqty} />}
           {selStock.length > 0 && <button onClick={() => setSelling(true)} className="rounded-lg bg-emerald-500 px-3 py-1.5 text-xs font-bold hover:bg-emerald-600">✓ Marcar como vendido{selStock.length > 1 ? ` (${selStock.length})` : ""}</button>}
           {selSold.length > 0 && (
             <span className="flex items-center gap-1.5">
-              <input inputMode="decimal" placeholder="Precio de venta S/" value={bulkPrice} onChange={(e) => setBulkPrice(e.target.value.replace(/[^\d.]/g, ""))} className="w-36 rounded-lg px-2 py-1 text-slate-900" />
+              <NumInput decimal prefix="S/" placeholder="Precio de venta" title="Precio de venta (S/)" value={bulkPrice} onChange={setBulkPrice} className="w-40 rounded-lg bg-white px-2 py-1 text-slate-900" />
               <button disabled={!(Number(bulkPrice) > 0)} onClick={applyPrice} className="rounded-lg bg-amber-500 px-3 py-1.5 text-xs font-bold disabled:opacity-40">Poner precio a {selSold.length} vendido{selSold.length > 1 ? "s" : ""}</button>
             </span>
           )}
@@ -394,9 +419,8 @@ function SalePriceCell({ id, price, onSaved }: { id: number; price: number | nul
     );
   return (
     <div className="w-28">
-      <input autoFocus inputMode="decimal" disabled={busy} value={v} onChange={(e) => setV(e.target.value.replace(/[^\d.]/g, ""))} onBlur={save} placeholder="S/"
-        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
-        className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 text-sm outline-none" />
+      <NumInput autoOpen decimal prefix="S/" title="Precio de venta (S/)" placeholder="0.00" value={v} onChange={setV} onDone={save}
+        className={`w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 text-sm ${busy ? "opacity-50" : ""}`} />
       {err && <div className="mt-0.5 text-[10px] font-semibold text-rose-600">{err}</div>}
     </div>
   );

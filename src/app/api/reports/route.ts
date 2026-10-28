@@ -28,7 +28,7 @@ export async function GET(req: NextRequest) {
     all(`SELECT COUNT(*) AS sales, COALESCE(SUM(s.qty),0) AS units, COALESCE(SUM(s.price),0) AS revenue, ${profit} AS profit,
          SUM(CASE WHEN s.modified IS NOT NULL THEN 1 ELSE 0 END) AS modified FROM sales s WHERE ${W}`, args),
     all(`SELECT st.id, st.name, st.color, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s JOIN stores st ON st.id=s.store_id WHERE ${W} GROUP BY st.id`, args),
-    all(`SELECT s.seller_id, s.seller_name, st.name AS store_name, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s JOIN stores st ON st.id=s.store_id WHERE ${W} GROUP BY s.seller_id ORDER BY revenue DESC`, args),
+    all(`SELECT s.seller_id, s.seller_name, st.name AS store_name, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s JOIN stores st ON st.id=s.store_id WHERE ${W} GROUP BY s.seller_name ORDER BY revenue DESC`, args),
     all(`SELECT COALESCE(json_extract(s.item,'$.brand'),'Otros') AS brand, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s WHERE ${W} GROUP BY brand ORDER BY revenue DESC`, args),
     all(`SELECT s.day, COUNT(*) AS sales, SUM(s.price) AS revenue FROM sales s WHERE ${W} GROUP BY s.day ORDER BY s.day`, args),
     all(`SELECT p.method, SUM(p.amount) AS amount, COUNT(*) AS n FROM payments p JOIN sales s ON s.id=p.sale_id WHERE ${W} GROUP BY p.method ORDER BY amount DESC`, args),

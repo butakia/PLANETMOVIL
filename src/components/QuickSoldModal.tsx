@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from "react";
 import { CheckCircle2, Loader2, X } from "lucide-react";
 import { api } from "@/lib/client";
 import { METHODS, limaToday } from "@/lib/format";
+import NumInput from "./NumInput";
 
 type Seller = { id: number; name: string; role: string; active: number };
 
@@ -87,7 +88,7 @@ export default function QuickSoldModal({ stores, onClose, onDone }: { stores: { 
               <div className="anim-pop mt-2 grid gap-3 sm:grid-cols-3">
                 <div><label className="label">Vendedora</label><select className="input" value={seller} onChange={(e) => setSeller(e.target.value)}><option value="">Escribir nombre…</option>{sellers.map((u) => <option key={u.id} value={u.id}>{u.name}</option>)}</select>
                   {!seller && <input className="input mt-1.5" placeholder="Ej. Yuli" value={sellerName} onChange={(e) => setSellerName(e.target.value)} />}</div>
-                <div><label className="label">Precio por equipo (S/)</label><input inputMode="decimal" className="input" placeholder="Vacío = sin venta" value={price} onChange={(e) => setPrice(e.target.value.replace(/[^\d.]/g, ""))} /></div>
+                <div><label className="label">Precio por equipo (S/)</label><NumInput decimal prefix="S/" className="input" title="Precio por equipo (S/)" placeholder="Vacío = sin venta" value={price} onChange={setPrice} /></div>
                 <div><label className="label">Medio de pago</label><select className="input" value={method} onChange={(e) => setMethod(e.target.value)}>{METHODS.map((m) => <option key={m}>{m}</option>)}</select></div>
               </div>
             )}

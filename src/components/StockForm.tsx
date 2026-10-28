@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useRef, useState } from "react";
+import NumInput from "./NumInput";
 import { AlertTriangle, Camera, Check, CheckCircle2, Loader2, Plus, Save, ScanLine, Smartphone, Headphones, X } from "lucide-react";
 import { api, type CatalogModel } from "@/lib/client";
 import { ACCESSORY_TYPES } from "@/lib/catalog";
@@ -225,7 +226,7 @@ export default function StockForm() {
               </div>
               <div>
                 <label className="label">Cantidad</label>
-                <input type="number" min={1} className="input" value={qty} onChange={(e) => setQty(Number(e.target.value))} />
+                <NumInput maxLen={4} className="input" title="Cantidad" value={String(qty)} onChange={(v) => setQty(Number(v) || 0)} />
               </div>
             </div>
           )}
@@ -266,13 +267,13 @@ export default function StockForm() {
             </div>
             <div>
               <label className="label">Precio sugerido de venta (S/)</label>
-              <input type="number" inputMode="decimal" className="input text-lg" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Opcional" />
+              <NumInput decimal prefix="S/" className="input text-lg" title="Precio sugerido (S/)" value={price} onChange={setPrice} placeholder="Opcional" />
             </div>
           </div>
           <button type="button" onClick={() => setShowBuy(!showBuy)} className="text-xs font-semibold text-brand-600 underline">{showBuy ? "Ocultar" : "Agregar"} datos de compra (precio de compra y proveedor)</button>
           {showBuy && (
             <div className="grid gap-3 sm:grid-cols-2">
-              <div><label className="label">Precio de compra (S/)</label><input type="number" inputMode="decimal" className="input" value={cost} onChange={(e) => setCost(e.target.value)} /></div>
+              <div><label className="label">Precio de compra (S/)</label><NumInput decimal prefix="S/" className="input" title="Precio de compra (S/)" value={cost} onChange={setCost} /></div>
               <div><label className="label">Proveedor</label><input className="input" value={supplier} onChange={(e) => setSupplier(e.target.value)} /></div>
             </div>
           )}

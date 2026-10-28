@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useState } from "react";
+import NumInput from "./NumInput";
 import { Download, FlaskConical, MessageCircle, Plus, Send, ShieldCheck, Trash2 } from "lucide-react";
 import { api, type Store } from "@/lib/client";
 import { useCatalog } from "./useCatalog";
@@ -70,7 +71,7 @@ function WhatsAppCard({ onFlash }: { onFlash: (m: string) => void }) {
       {rec.map((r, i) => (
         <div key={i} className="grid gap-2 sm:grid-cols-[1fr_1fr_1fr_auto]">
           <input className="input" placeholder="Nombre" value={r.name ?? ""} onChange={(e) => upd(i, "name", e.target.value)} />
-          <input className="input" inputMode="tel" placeholder="Celular con código de país (51999888777)" value={r.phone} onChange={(e) => upd(i, "phone", e.target.value)} />
+          <NumInput className="input" title="Celular con código de país" maxLen={14} placeholder="Celular con código de país (51999888777)" value={r.phone} onChange={(v) => upd(i, "phone", v)} />
           <input className="input" placeholder="Clave de CallMeBot" value={r.apikey} onChange={(e) => upd(i, "apikey", e.target.value)} />
           <button className="btn-danger" onClick={() => setRec(rec.filter((_, j) => j !== i))}><Trash2 className="h-4 w-4" /></button>
         </div>

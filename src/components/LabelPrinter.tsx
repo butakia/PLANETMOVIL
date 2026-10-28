@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import NumInput from "./NumInput";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
 import { ArrowLeft, Barcode, Check, Plus, Printer, QrCode, Search, Tag } from "lucide-react";
@@ -198,7 +199,7 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
 
               <div className="grid gap-3 sm:grid-cols-2">
                 <div><label className="label">Tamaño</label><select className="input" value={size} onChange={(e) => chooseSize(e.target.value)}>{Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-                <div><label className="label">Cantidad</label><input type="number" min={1} max={200} className="input" value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} /></div>
+                <div><label className="label">Cantidad</label><NumInput maxLen={3} className="input" title="Cantidad de etiquetas" value={String(copies)} onChange={(v) => setCopies(Math.max(1, Math.min(200, Number(v) || 1)))} /></div>
               </div>
               {sel?.price_suggested ? <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} /> Mostrar precio ({soles(sel.price_suggested)})</label> : null}
 
