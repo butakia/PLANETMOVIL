@@ -31,7 +31,7 @@ export async function currentUser(): Promise<User | null> {
     const u = await one<User>("SELECT id,username,name,role,store_id FROM users WHERE id=? AND active=1", [Number(payload.uid)]);
     if (u && u.role === "seller" && !u.store_id) {
       const c = Number((await cookies()).get("pm_store")?.value);
-      return { ...u, store_id: c === 2 ? 2 : 1, rotating: true };
+      return { ...u, store_id: [2, 3, 4].includes(c) ? c : 1, rotating: true };
     }
     return u;
   } catch {

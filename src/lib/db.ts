@@ -126,6 +126,47 @@ async function migrate(c: Client) {
   await loadManualSold(c);
   await backfillSeller(c);
   await backfillSalePrice(c);
+  await moveCode1528(c);
+  await trainingPhones(c);
+}
+
+// Una sola vez: el 1528 vuelve a Soluciones Móviles.
+async function moveCode1528(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='move_1528_v1'")).rows.length) return;
+  const rows = (await c.execute("SELECT id,store_id FROM products WHERE code='1528'")).rows;
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const r of rows) {
+    if (Number(r.store_id) === 2) continue;
+    stmts.push({ sql: "UPDATE products SET store_id=2 WHERE id=?", args: [Number(r.id)] });
+    stmts.push({ sql: "INSERT INTO movements (product_id,from_store,to_store,user_name) VALUES (?,?,?,'Omar')", args: [Number(r.id), Number(r.store_id), 2] });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('move_1528_v1','1')", args: [] });
+  await c.batch(stmts, "write");
+}
+
+// Una sola vez: 9 equipos de prueba para capacitar al personal (códigos 10000 a 90000). Se borran desde Stock → Editar.
+async function trainingPhones(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='training_v1'")).rows.length) return;
+  const models: [string, string, number, number][] = [
+    ["Samsung", "Samsung A07 (PRUEBA)", 4, 128], ["Redmi", "Redmi A5 (PRUEBA)", 3, 64], ["Honor", "Honor X5c Plus (PRUEBA)", 4, 256],
+    ["ZTE", "ZTE Blade A35e (PRUEBA)", 6, 64], ["Motorola", "Motorola G06 (PRUEBA)", 4, 128], ["Honor", "Honor Play 10 (PRUEBA)", 4, 128],
+    ["Samsung", "Samsung A16 (PRUEBA)", 4, 128], ["Nokia", "Nokia 105 (PRUEBA)", 0, 0], ["Redmi", "Redmi 15C (PRUEBA)", 4, 256],
+  ];
+  const stores = [1, 1, 1, 2, 2, 2, 3, 3, 3];
+  const day = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (let i = 0; i < 9; i++) {
+    const code = String((i + 1) * 10000);
+    if ((await c.execute({ sql: "SELECT 1 FROM products WHERE code=?", args: [code] })).rows.length) continue;
+    const [brand, model, ram, storage] = models[i];
+    stmts.push({ sql: "INSERT OR IGNORE INTO brands (name,color) VALUES (?,?)", args: [brand, "#64748b"] });
+    stmts.push({
+      sql: "INSERT INTO products (kind,store_id,brand,model,imei1,code,ram,storage,color,condition,qty,price_suggested,entry_date,notes,created_by,is_test) VALUES ('celular',?,?,?,?,?,?,?,?,'Sellado',1,?,?,?,'Omar',1)",
+      args: [stores[i], brand, model, `99000000000${String(i + 1).padStart(4, "0")}`, code, ram || null, storage || null, "Negro", 150 + i * 50, day, "PRUEBA · equipo para capacitar al personal"],
+    });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('training_v1','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: el precio de venta de los equipos vendidos sale de su venta registrada (por unidad).

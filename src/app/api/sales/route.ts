@@ -52,7 +52,12 @@ export async function POST(req: NextRequest) {
   if (late) {
     day = String(b.sale_date ?? "");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return NextResponse.json({ error: "Elige la fecha en que se hizo la venta" }, { status: 400 });
+  } else if (b.service && b.sale_date && String(b.sale_date) !== today) {
+    // Servicio técnico con fecha anterior: se registra directo (no toca stock, no necesita aprobación).
+    day = String(b.sale_date);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > today) return NextResponse.json({ error: "La fecha del servicio no es válida" }, { status: 400 });
   }
+  const backdated = day !== today && !late;
   const c = await db();
   const tx = await c.transaction("write");
   try {
@@ -73,8 +78,8 @@ export async function POST(req: NextRequest) {
       p = pr.rows[0] ? ({ ...pr.rows[0] } as unknown as Product) : null;
       if (!p || p.status !== "stock") throw new Error("Ese equipo ya no está disponible en stock");
       if (p.store_id === 0) throw new Error("Ese equipo está en el almacén general. Trasládalo primero a una tienda.");
-      if (g.user.role === "seller" && p.store_id !== g.user.store_id) throw new Error("Ese equipo está en la otra tienda. Trasládalo primero.");
-      storeId = p.store_id;
+      // La vendedora vende en la tienda que eligió, aunque el equipo figure en otra: la venta queda en su tienda y el equipo pasa a ella.
+      storeId = g.user.role === "seller" && g.user.store_id ? g.user.store_id : p.store_id;
       qty = p.kind === "accesorio" ? Math.min(Math.max(1, Number(b.qty) || 1), p.qty) : 1;
       const edits = (b.edits ?? {}) as Record<string, unknown>;
       const next: Record<string, unknown> = { ...p };
@@ -128,6 +133,10 @@ export async function POST(req: NextRequest) {
     for (const x of payments) await tx.execute({ sql: "INSERT INTO payments (sale_id,method,amount) VALUES (?,?,?)", args: [saleId, x.method, Number(x.amount)] });
 
     if (p && !late) {
+      if (p.store_id !== storeId) {
+        await tx.execute({ sql: "UPDATE products SET store_id=? WHERE id=?", args: [storeId, p.id] });
+        await tx.execute({ sql: "INSERT INTO movements (product_id,from_store,to_store,user_name) VALUES (?,?,?,?)", args: [p.id, p.store_id, storeId, g.user.name] });
+      }
       const left = p.qty - qty;
       await tx.execute({ sql: "UPDATE products SET qty=?, status=?, seller=?, sale_price=? WHERE id=?", args: [left, left <= 0 ? "sold" : "stock", left <= 0 ? g.user.name : null, left <= 0 ? price / qty : null, p.id] });
     }
@@ -137,6 +146,7 @@ export async function POST(req: NextRequest) {
     const [yy, mm, dd] = day.split("-");
     let type = "venta", flagged = 0, message = `${g.user.name} vendió ${desc} por S/ ${price.toFixed(2)} en ${store.name}`;
     if (late) { type = "venta_tardia"; flagged = 1; message = `${g.user.name} registró una venta FUERA DE TIEMPO del ${dd}/${mm}/${yy}: ${desc} por S/ ${price.toFixed(2)} en ${store.name}${noStock ? " (equipo no registrado en stock)" : ""}. Pendiente de tu aprobación.`; }
+    else if (backdated) { type = "venta_fecha_anterior"; flagged = 1; message = `${g.user.name} registró un servicio con fecha anterior (${dd}/${mm}/${yy}): ${desc} por S/ ${price.toFixed(2)} en ${store.name}.`; }
     else if (noStock) { type = "venta_manual"; flagged = 1; message += " — equipo NO registrado en stock (venta manual)"; }
     else if (changed.length) { type = "venta_modificada"; flagged = 1; message += ` — con ${changed.length} corrección(es): ${changed.map((k) => `${k}: ${changes[k].from ?? "—"} → ${changes[k].to ?? "—"}`).join(", ")}`; }
     await tx.execute({ sql: "INSERT INTO alerts (type,message,sale_id,store_id,flagged) VALUES (?,?,?,?,?)", args: [type, message, saleId, storeId, flagged] });

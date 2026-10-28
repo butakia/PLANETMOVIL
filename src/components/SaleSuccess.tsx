@@ -1,10 +1,12 @@
 "use client";
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
+import { playSuccess } from "@/lib/sound";
 
 const COLORS = ["#22c55e", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6", "#06b6d4", "#ef4444", "#facc15"];
 
 /** Pantalla de venta confirmada: check verde animado y confeti. */
 export default function SaleSuccess({ message = "¡Venta registrada!" }: { message?: string }) {
+  useEffect(() => { playSuccess(); }, []);
   const pieces = useMemo(
     () => Array.from({ length: 70 }, (_, i) => ({
       left: Math.random() * 100,

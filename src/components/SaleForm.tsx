@@ -11,6 +11,7 @@ import NumPad from "./NumPad";
 import SimpleAccessory, { accessoryName, type Accessory } from "./SimpleAccessory";
 import ServiceFields, { type Service } from "./ServiceFields";
 import SaleSuccess from "./SaleSuccess";
+import { playSuccess } from "@/lib/sound";
 
 type P = {
   id: number; kind: "celular" | "accesorio"; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -25,7 +26,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const { cat, brandColor } = useCatalog();
   const [mode, setMode] = useState<null | "celular" | "accesorio" | "servicio">(null);
   const [acc, setAcc] = useState<Accessory | null>(null);
-  const [svc, setSvc] = useState<Service>({ technician: "", detail: "" });
+  const [svc, setSvc] = useState<Service>({ technician: "", detail: "", date: limaToday() });
+  const [tTo, setTTo] = useState<number>(user.store_id ?? 1);
   const [success, setSuccess] = useState(false);
   const [code, setCode] = useState("");
   const [matches, setMatches] = useState<P[]>([]);
@@ -93,7 +95,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const remaining = Math.round((total - paid) * 100) / 100;
   const isSvc = mode === "servicio";
   const svcReady = isSvc && !!svc.technician.trim() && !!svc.detail.trim();
-  const hasItem = !!p || manual || !!acc || svcReady;
+  const hasItem = !!p || manual || !!acc || isSvc;
   const isAcc = !!acc || p?.kind === "accesorio";
   const itemName = isSvc ? `Servicio técnico: ${svc.detail.trim()}` : acc ?[accessoryName(acc), acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
 
@@ -113,9 +115,10 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   useEffect(() => { if (mode === "celular") codeRef.current?.focus(); }, [mode]);
   const store = cat?.stores.find((s) => s.id === (p?.store_id ?? mStore));
 
-  async function transfer(to = user.store_id) {
+  async function transfer(to: number | null = user.store_id) {
     if (!p || !to) return;
-    await api("/api/transfer", { body: { product_id: p.id, to_store: to } });
+    try { await api("/api/transfer", { body: { product_id: p.id, to_store: to } }); } catch (e) { setErr((e as Error).message); return; }
+    playSuccess();
     await search(p.code ?? code);
   }
 
@@ -142,7 +145,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
           product_id: p?.id, price: total, qty, edits, customer_name: customer, phone, dni, late, sale_date: late ? saleDate : undefined,
           manual: manual ? { ...fields, store_id: mStore } : undefined,
           accessory: acc ? { name: accessoryName(acc), detail: acc.detail.trim(), store_id: mStore, category: acc.category } : undefined,
-          service: isSvc ? { technician: svc.technician.trim(), detail: svc.detail.trim(), store_id: mStore } : undefined,
+          service: isSvc ? { technician: svc.technician.trim(), detail: svc.detail.trim(), store_id: mStore } : undefined, ...(isSvc && svc.date ? { sale_date: svc.date } : {}),
           payments: payList,
         },
       });
@@ -158,7 +161,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   }
 
   const inAlmacen = !!p && p.store_id === 0;
-  const otherStore = p && (inAlmacen || (user.role === "seller" && p.store_id !== user.store_id));
+  const otherStore = p && (inAlmacen || (!!user.store_id && p.store_id !== user.store_id));
   const bc = manual ? "#475569" : brandColor(p?.brand);
   const inputCls = (k: string) => `input ${changes.includes(k) ? "!border-amber-400 !bg-amber-50" : ""}`;
 
@@ -218,13 +221,13 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       {/* 1c. Servicio técnico */}
       {mode === "servicio" && (
         <div className="card p-4 sm:p-5">
-          <label className="label !mb-3">1 · Servicio técnico</label>
+          <label className="label !mb-3">1 · Servicio técnico (técnico y detalle)</label>
           <ServiceFields onChange={setSvc} />
-          {svcReady && user.role === "admin" && cat && (
+          {user.role === "admin" && cat && (
             <div className="mt-3"><label className="label">Tienda</label>
               <select className="input" value={mStore} onChange={(e) => setMStore(Number(e.target.value))}>{cat.stores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}</select></div>
           )}
-          {svcReady && <button type="button" onClick={backToChoice} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">← Cambiar (celulares / accesorios / servicio)</button>}
+          {<button type="button" onClick={backToChoice} className="mt-3 text-xs font-semibold text-slate-400 hover:text-brand-600">← Cambiar (celulares / accesorios / servicio)</button>}
         </div>
       )}
 
@@ -276,10 +279,13 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             {otherStore && (
               <div className="flex flex-wrap items-center gap-3 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
                 <AlertTriangle className="h-4 w-4" />
-                {inAlmacen ? <span>Este equipo pertenece a <b>Almacén</b>. Transfiérelo para poder venderlo.</span> : <span>Este equipo está en <b>{p?.store_name}</b>, no en tu tienda.</span>}
-                {user.store_id
-                  ? <button onClick={() => transfer()} className="btn-primary ml-auto !py-1.5"><ArrowLeftRight className="h-4 w-4" /> {inAlmacen ? "Transferir a" : "Traer a"} {cat?.stores.find((s) => s.id === user.store_id)?.name ?? "mi tienda"}</button>
-                  : <span className="ml-auto flex flex-wrap gap-2">{cat?.stores.map((s) => <button key={s.id} onClick={() => transfer(s.id)} className="btn-primary !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Transferir a {s.name}</button>)}</span>}
+                <span>Este equipo está en <b>{inAlmacen ? "Almacén" : p?.store_name}</b>{inAlmacen ? ". Traspásalo a una tienda para venderlo." : "."}</span>
+                <span className="ml-auto flex items-center gap-2">
+                  <select className="input !w-auto !py-1.5 text-sm" value={tTo} onChange={(e) => setTTo(Number(e.target.value))} aria-label="Traspasar a">
+                    {cat?.stores.filter((s) => s.id !== p?.store_id).map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                  </select>
+                  <button onClick={() => transfer(tTo)} className="btn-primary !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Traspasar</button>
+                </span>
               </div>
             )}
             <div className="p-4">
@@ -375,7 +381,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
           </div>
 
           {err && <p className="anim-pop rounded-xl bg-rose-50 p-3 text-sm font-medium text-rose-700">{err}</p>}
-          <button disabled={busy || !!otherStore} onClick={review} className="btn-primary w-full py-4 text-base">
+          <button disabled={busy || inAlmacen} onClick={review} className="btn-primary w-full py-4 text-base">
             <ShoppingCart className="h-5 w-5" /> {late ? "Revisar y enviar para aprobación" : "Revisar y registrar venta"} · {soles(total)}
           </button>
         </>
