@@ -1,6 +1,7 @@
 import { createClient, type Client, type InValue } from "@libsql/client";
 import { randomBytes, scryptSync } from "node:crypto";
 import { BRAND_COLORS, CATALOG, COLORS } from "./catalog";
+import { STOCK_SOLUCIONES } from "./seed-stock";
 
 const g = globalThis as unknown as { __pm_client?: Client; __pm_ready?: Promise<void> };
 
@@ -107,6 +108,34 @@ async function migrate(c: Client) {
     }
     await c.execute("INSERT INTO settings (key,value) VALUES ('admin_is_omar','1')");
   }
+  await loadSolucionesStock(c);
+}
+
+// Una sola vez: borra los equipos de prueba (y sus ventas) y carga el stock real de Soluciones Móviles.
+async function loadSolucionesStock(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='stock_soluciones_v1'")).rows.length) return;
+  const test = "(SELECT id FROM products WHERE is_test=1)";
+  const stmts: { sql: string; args: InValue[] }[] = [
+    { sql: `DELETE FROM payments WHERE sale_id IN (SELECT id FROM sales WHERE product_id IN ${test})`, args: [] },
+    { sql: `DELETE FROM alerts WHERE sale_id IN (SELECT id FROM sales WHERE product_id IN ${test})`, args: [] },
+    { sql: `DELETE FROM sales WHERE product_id IN ${test}`, args: [] },
+    { sql: `DELETE FROM movements WHERE product_id IN ${test}`, args: [] },
+    { sql: "DELETE FROM products WHERE is_test=1", args: [] },
+  ];
+  const day = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+  for (const [model, imei, code, ram, storage] of STOCK_SOLUCIONES) {
+    const dup = await c.execute({ sql: "SELECT 1 FROM products WHERE status='stock' AND (code=? OR imei1=? OR imei2=?)", args: [code, imei, imei] });
+    if (dup.rows.length) continue;
+    const brand = model.split(" ")[0];
+    stmts.push({ sql: "INSERT OR IGNORE INTO brands (name,color) VALUES (?,?)", args: [brand, "#64748b"] });
+    stmts.push({ sql: "INSERT OR IGNORE INTO models (name,brand,def_ram,def_storage) VALUES (?,?,?,?)", args: [model, brand, ram ?? 4, storage ?? 64] });
+    stmts.push({
+      sql: "INSERT INTO products (kind,store_id,brand,model,imei1,code,ram,storage,condition,qty,entry_date,created_by) VALUES ('celular',2,?,?,?,?,?,?,'Sellado',1,?,'Omar')",
+      args: [brand, model, imei, code, ram, storage, day],
+    });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('stock_soluciones_v1','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 export async function db(): Promise<Client> {
