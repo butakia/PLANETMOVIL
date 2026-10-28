@@ -2,12 +2,13 @@
 import { useEffect, useRef, useState } from "react";
 import QRCode from "qrcode";
 import JsBarcode from "jsbarcode";
-import { Barcode, Printer, QrCode, Search } from "lucide-react";
+import { ArrowLeft, Barcode, Check, Plus, Printer, QrCode, Search, Tag } from "lucide-react";
 import { api } from "@/lib/client";
 import { soles } from "@/lib/format";
 
 type P = { id: number; kind: string; model: string; brand: string | null; code: string | null; ident: string | null; imei1: string | null; price_suggested: number | null; store_name: string; qty: number };
 type Mode = "qr" | "bar";
+type Step = "inicio" | "producto" | "imprimir";
 
 const SIZES: Record<string, { label: string; w: number; h: number; sheet?: boolean }> = {
   "58x40": { label: "NES D58 · 58 × 40 mm (rollo)", w: 58, h: 40 },
@@ -75,8 +76,10 @@ function LabelCode({ value, mode, h }: { value: string; mode: Mode; h: number })
 }
 
 export default function LabelPrinter({ initialId }: { initialId?: number }) {
+  const [step, setStep] = useState<Step>(initialId ? "imprimir" : "inicio");
   const [q, setQ] = useState("");
   const [withPhones, setWithPhones] = useState(false);
+  const [manual, setManual] = useState(false);
   const [rows, setRows] = useState<P[]>([]);
   const [sel, setSel] = useState<P | null>(null);
   const [text, setText] = useState("");
@@ -90,6 +93,7 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
   const chooseSize = (s: string) => { setSize(s); try { localStorage.setItem("pm_label_size", s); } catch { /* sin almacenamiento */ } };
 
   useEffect(() => {
+    if (step !== "producto" || manual) return;
     const t = setTimeout(async () => {
       const sp = new URLSearchParams({ status: "stock" });
       if (!withPhones) sp.set("kind", "accesorio");
@@ -97,7 +101,7 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
       setRows((await api<{ products: P[] }>(`/api/products?${sp}`)).products.slice(0, 40));
     }, 200);
     return () => clearTimeout(t);
-  }, [q, withPhones]);
+  }, [q, withPhones, step, manual]);
 
   useEffect(() => {
     if (!initialId) return;
@@ -109,66 +113,142 @@ export default function LabelPrinter({ initialId }: { initialId?: number }) {
   const S = SIZES[size];
   const codeH = Math.min(S.h - 8, S.w / 2.4);
 
+  function start() { setSel(null); setText(""); setTitle(""); setQ(""); setManual(false); setCopies(1); setStep("producto"); }
+  function pick(r: P) { setSel(r); setCopies(Math.min(r.qty || 1, 50)); setStep("imprimir"); }
+
+  const stepIdx = step === "producto" ? 1 : 2;
+
   return (
-    <div className="stagger space-y-5">
+    <div className="space-y-5">
       <div className="no-print">
-        <h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Etiquetas QR y códigos de barras</h1>
-        <p className="text-sm text-slate-500">Para accesorios sin código de barras: elige el producto, imprime una etiqueta (o varias) y pégalas. Al escanearla con la pistola o la cámara, el sistema reconoce el producto.</p>
+        <h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Etiquetas</h1>
+        <p className="text-sm text-slate-500">Imprime etiquetas con QR o código de barras para tus productos.</p>
       </div>
 
-      <div className="no-print grid gap-4 lg:grid-cols-[1fr_22rem]">
-        <div className="card space-y-3 p-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative min-w-52 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" /><input className="input pl-9" placeholder="Buscar producto del stock…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
-            <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={withPhones} onChange={(e) => setWithPhones(e.target.checked)} /> incluir celulares</label>
+      {step === "inicio" && (
+        <div className="no-print card mx-auto flex max-w-xl flex-col items-center gap-4 px-6 py-14 text-center">
+          <div className="grid h-16 w-16 place-items-center rounded-2xl bg-blue-50 text-blue-700"><Tag className="h-8 w-8" /></div>
+          <div>
+            <h2 className="text-lg font-extrabold text-slate-800">¿Necesitas una etiqueta?</h2>
+            <p className="mt-1 text-sm text-slate-500">Elige el producto, ajusta el tamaño y listo.</p>
           </div>
-          <div className="max-h-72 divide-y divide-slate-100 overflow-auto rounded-xl border border-slate-100">
-            {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-400">No hay productos. Ingresa accesorios en “Ingresar” o escribe un código manual abajo.</p>}
-            {rows.map((r) => (
-              <button key={r.id} onClick={() => { setSel(r); setCopies(Math.min(r.qty || 1, 50)); }} className={`flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left text-sm transition hover:bg-blue-50 ${sel?.id === r.id ? "bg-blue-50" : ""}`}>
-                <span className="font-semibold">{r.model}{r.qty > 1 ? <span className="ml-1 text-xs font-normal text-slate-500">× {r.qty}</span> : null}</span>
-                <span className="font-mono text-xs text-slate-500">{r.ident || r.code || "—"} · {r.store_name}</span>
-              </button>
-            ))}
-          </div>
-          <div className="grid gap-2 border-t border-slate-100 pt-3 sm:grid-cols-2">
-            <div className="sm:col-span-2 text-xs font-bold uppercase text-slate-400">O escribe un código manual</div>
-            <input className="input" placeholder="Nombre en la etiqueta" value={title} onChange={(e) => { setTitle(e.target.value); setSel(null); }} />
-            <input className="input font-mono" placeholder="Código (ej. CARG-20W)" value={text} onChange={(e) => { setText(e.target.value); setSel(null); }} />
-          </div>
+          <button onClick={start} className="btn-primary px-8 py-3.5 text-base"><Plus className="h-5 w-5" /> Crear etiqueta</button>
         </div>
+      )}
 
-        <div className="card space-y-3 p-4">
-          <div className="flex gap-2">
-            <button onClick={() => setMode("qr")} className={`chip flex-1 ${mode === "qr" ? "chip-on" : ""}`}><QrCode className="h-4 w-4" /> Código QR</button>
-            <button onClick={() => setMode("bar")} className={`chip flex-1 ${mode === "bar" ? "chip-on" : ""}`}><Barcode className="h-4 w-4" /> Código de barras</button>
-          </div>
-          <div><label className="label">Tamaño</label><select className="input" value={size} onChange={(e) => chooseSize(e.target.value)}>{Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
-          <div><label className="label">Cantidad de etiquetas</label><input type="number" min={1} max={200} className="input" value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} /></div>
-          <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} /> Mostrar precio sugerido</label>
-          <button disabled={!value || printing} onClick={async () => {
-            setPrinting(true);
-            try { await printLabels({ value, name, mode, copies, w: S.w, h: S.h, sheet: S.sheet, price: showPrice && sel?.price_suggested ? soles(sel.price_suggested) : "", codeH }); } finally { setPrinting(false); }
-          }} className="btn-primary w-full py-3"><Printer className="h-5 w-5" /> Imprimir {copies} etiqueta{copies > 1 ? "s" : ""}</button>
-          <p className="text-xs text-slate-400">Se imprime solo la etiqueta, una por página, con el tamaño exacto elegido. En el cuadro de impresión elige <b>NES D58</b> y deja los márgenes en “Ninguno” y la escala en 100 %.</p>
-        </div>
-      </div>
-
-      <style>{`@media print { @page { ${S.sheet ? "size: A4; margin: 8mm" : `size: ${S.w}mm ${S.h}mm; margin: 0`} } }`}</style>
-      <div className="no-print text-xs font-bold uppercase text-slate-400">Vista previa</div>
-      <div className="print-area flex flex-wrap gap-2">
-        {value ? Array.from({ length: copies }).map((_, i) => (
-          <div key={i} style={{ width: S.w + "mm", height: S.h + "mm", breakAfter: S.sheet ? "auto" : "page" }} className="flex flex-col justify-between overflow-hidden rounded-md border border-dashed border-slate-300 bg-white p-[2mm] text-black print:rounded-none print:border-0">
-            <div className="flex min-h-0 flex-1 items-center gap-[2mm]">
-              <LabelCode value={value} mode={mode} h={codeH} />
-              <div className="min-w-0 flex-1 text-[9px] leading-tight">
-                <div className="line-clamp-3 text-[10px] font-extrabold uppercase">{name || "—"}</div>
-                {mode === "qr" && <div className="mt-0.5 break-all font-mono text-[8px]">{value}</div>}
-                {showPrice && sel?.price_suggested ? <div className="mt-0.5 text-[11px] font-extrabold">{soles(sel.price_suggested)}</div> : null}
-              </div>
+      {step === "producto" && (
+        <div className="no-print mx-auto max-w-2xl space-y-4">
+          <Steps n={1} />
+          <div className="card space-y-4 p-5">
+            <div>
+              <h2 className="text-lg font-extrabold text-slate-800">¿Para qué producto?</h2>
+              <p className="text-sm text-slate-500">Búscalo en tu stock o escribe un código a mano.</p>
             </div>
+            <div className="flex gap-1.5 rounded-2xl bg-slate-200/70 p-1.5">
+              <button onClick={() => setManual(false)} className={`flex-1 rounded-xl px-4 py-2 text-sm font-bold transition ${!manual ? "bg-white text-blue-900 shadow" : "text-slate-500"}`}>Del stock</button>
+              <button onClick={() => setManual(true)} className={`flex-1 rounded-xl px-4 py-2 text-sm font-bold transition ${manual ? "bg-white text-blue-900 shadow" : "text-slate-500"}`}>Código manual</button>
+            </div>
+
+            {!manual ? (
+              <>
+                <div className="flex flex-wrap items-center gap-3">
+                  <div className="relative min-w-52 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" /><input autoFocus className="input pl-9" placeholder="Buscar producto…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+                  <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={withPhones} onChange={(e) => setWithPhones(e.target.checked)} /> incluir celulares</label>
+                </div>
+                <div className="max-h-80 divide-y divide-slate-100 overflow-auto rounded-xl border border-slate-100">
+                  {rows.length === 0 && <p className="p-6 text-center text-sm text-slate-400">No hay productos. Prueba con otra búsqueda o usa “Código manual”.</p>}
+                  {rows.map((r) => (
+                    <button key={r.id} onClick={() => pick(r)} className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left text-sm transition hover:bg-blue-50">
+                      <span className="font-semibold">{r.model}{r.qty > 1 ? <span className="ml-1 text-xs font-normal text-slate-500">× {r.qty}</span> : null}</span>
+                      <span className="font-mono text-xs text-slate-500">{r.ident || r.code || "—"} · {r.store_name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="space-y-3">
+                <div><label className="label">Nombre en la etiqueta</label><input className="input" placeholder="Ej. Cargador 20W" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
+                <div><label className="label">Código</label><input className="input font-mono" placeholder="Ej. CARG-20W" value={text} onChange={(e) => setText(e.target.value)} /></div>
+                <button disabled={!text.trim()} onClick={() => { setSel(null); setStep("imprimir"); }} className="btn-primary w-full py-3">Continuar</button>
+              </div>
+            )}
           </div>
-        )) : <p className="no-print text-sm text-slate-400">Elige un producto o escribe un código para ver la etiqueta.</p>}
+          <button onClick={() => setStep("inicio")} className="btn-ghost"><ArrowLeft className="h-4 w-4" /> Cancelar</button>
+        </div>
+      )}
+
+      {step === "imprimir" && (
+        <>
+          <div className="no-print mx-auto max-w-2xl space-y-4">
+            <Steps n={2} />
+            <div className="card space-y-4 p-5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <div className="text-xs font-bold uppercase text-slate-400">Producto</div>
+                  <div className="truncate text-base font-extrabold text-slate-800">{name || "—"}</div>
+                  <div className="font-mono text-xs text-slate-500">{value}</div>
+                </div>
+                <button onClick={() => setStep("producto")} className="btn-ghost shrink-0 !py-1.5">Cambiar</button>
+              </div>
+
+              <div className="flex gap-2">
+                <button onClick={() => setMode("qr")} className={`chip flex-1 ${mode === "qr" ? "chip-on" : ""}`}><QrCode className="h-4 w-4" /> Código QR</button>
+                <button onClick={() => setMode("bar")} className={`chip flex-1 ${mode === "bar" ? "chip-on" : ""}`}><Barcode className="h-4 w-4" /> Código de barras</button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div><label className="label">Tamaño</label><select className="input" value={size} onChange={(e) => chooseSize(e.target.value)}>{Object.entries(SIZES).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}</select></div>
+                <div><label className="label">Cantidad</label><input type="number" min={1} max={200} className="input" value={copies} onChange={(e) => setCopies(Math.max(1, Math.min(200, Number(e.target.value) || 1)))} /></div>
+              </div>
+              {sel?.price_suggested ? <label className="flex items-center gap-2 text-sm text-slate-600"><input type="checkbox" className="accent-blue-700" checked={showPrice} onChange={(e) => setShowPrice(e.target.checked)} /> Mostrar precio ({soles(sel.price_suggested)})</label> : null}
+
+              <div>
+                <div className="mb-2 text-xs font-bold uppercase text-slate-400">Así se verá</div>
+                <div className="flex justify-center overflow-auto rounded-xl bg-slate-100 p-4">
+                  <Preview value={value} name={name} mode={mode} w={S.w} h={S.h} codeH={codeH} price={showPrice && sel?.price_suggested ? soles(sel.price_suggested) : ""} />
+                </div>
+              </div>
+
+              <button disabled={!value || printing} onClick={async () => {
+                setPrinting(true);
+                try { await printLabels({ value, name, mode, copies, w: S.w, h: S.h, sheet: S.sheet, price: showPrice && sel?.price_suggested ? soles(sel.price_suggested) : "", codeH }); } finally { setPrinting(false); }
+              }} className="btn-primary w-full py-3.5 text-base"><Printer className="h-5 w-5" /> Imprimir {copies} etiqueta{copies > 1 ? "s" : ""}</button>
+              <p className="text-xs text-slate-400">En el cuadro de impresión elige <b>NES D58</b>, márgenes “Ninguno” y escala 100 %.</p>
+            </div>
+            <button onClick={start} className="btn-soft"><Plus className="h-4 w-4" /> Crear otra etiqueta</button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function Steps({ n }: { n: 1 | 2 }) {
+  const items = ["Producto", "Imprimir"];
+  return (
+    <div className="flex items-center gap-2 text-sm font-bold">
+      {items.map((t, i) => {
+        const done = i + 1 < n, on = i + 1 === n;
+        return (
+          <div key={t} className="flex items-center gap-2">
+            {i > 0 && <span className="h-px w-8 bg-slate-300" />}
+            <span className={`grid h-6 w-6 place-items-center rounded-full text-xs ${done ? "bg-emerald-500 text-white" : on ? "bg-blue-700 text-white" : "bg-slate-200 text-slate-500"}`}>{done ? <Check className="h-3.5 w-3.5" /> : i + 1}</span>
+            <span className={on ? "text-slate-800" : "text-slate-400"}>{t}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Preview({ value, name, mode, w, h, codeH, price }: { value: string; name: string; mode: Mode; w: number; h: number; codeH: number; price: string }) {
+  return (
+    <div style={{ width: w + "mm", height: h + "mm" }} className="flex shrink-0 items-center gap-[2mm] overflow-hidden rounded-md border border-dashed border-slate-300 bg-white p-[2mm] text-black shadow-sm">
+      <LabelCode value={value} mode={mode} h={codeH} />
+      <div className="min-w-0 flex-1 text-[9px] leading-tight">
+        <div className="line-clamp-3 text-[10px] font-extrabold uppercase">{name || "—"}</div>
+        {mode === "qr" && <div className="mt-0.5 break-all font-mono text-[8px]">{value}</div>}
+        {price ? <div className="mt-0.5 text-[11px] font-extrabold">{price}</div> : null}
       </div>
     </div>
   );
