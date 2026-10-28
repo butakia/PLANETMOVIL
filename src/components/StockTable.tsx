@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, Loader2, Pencil, Plus, QrCode, Search, Trash2, Upload, X } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, QrCode, Search, Trash2, Upload, X } from "lucide-react";
 import { api, downloadCSV } from "@/lib/client";
 import { fmtDay, soles, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -26,6 +26,8 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [kind, setKind] = useState("");
   const [status, setStatus] = useState("stock");
   const [sort, setSort] = useState("recientes");
+  const [dl, setDl] = useState(false);
+  const [making, setMaking] = useState("");
   const [group, setGroup] = useState(false);
   const [adv, setAdv] = useState(false);
   const [f, setF] = useState({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" });
@@ -74,6 +76,36 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   }
   const oneSel = sel.size === 1 ? rows.find((r) => sel.has(r.id)) : null;
 
+  const SORT_NAMES: Record<string, string> = { recientes: "más recientes primero", antiguos: "más antiguos primero", tienda: "por tienda", marca: "marca y modelo", precio_mayor: "precio mayor a menor", precio_menor: "precio menor a mayor", codigo: "código" };
+  async function report(kind: "pdf" | "xlsx" | "csv") {
+    setDl(false);
+    if (kind === "csv") return exportCsv();
+    setMaking(kind);
+    try {
+      const { downloadStockPdf, downloadStockXlsx } = await import("@/lib/stock-report");
+      const storeName = store === "" ? "" : store === "0" ? "Almacén general" : cat?.stores.find((s) => String(s.id) === store)?.name ?? "";
+      const filters = [
+        storeName && `Tienda: ${storeName}`,
+        `Situación: ${{ stock: "en stock", sold: "vendidos", incautado: "incautados", all: "todos" }[status] ?? status}`,
+        brand && `Marca: ${brand}`,
+        kind_() && `Tipo: ${kind_()}`,
+        q && `Búsqueda: "${q}"`,
+        f.ram && `RAM: ${f.ram} GB`,
+        f.storage && `Almacenamiento: ${storageLabel(Number(f.storage))}`,
+        f.color && `Color: ${f.color}`,
+        `Orden: ${SORT_NAMES[sort]}`,
+      ].filter(Boolean) as string[];
+      const meta = {
+        title: "Reporte de stock",
+        filters,
+        storeColor: (id: number) => (id === 0 ? "#475569" : cat?.stores.find((s) => s.id === id)?.color ?? "#64748b"),
+        brandColor: (b: string | null) => brandColor(b),
+      };
+      if (kind === "pdf") await downloadStockPdf(rows, meta); else await downloadStockXlsx(rows, meta);
+    } finally { setMaking(""); }
+  }
+  const kind_ = () => (kind === "celular" ? "celulares" : kind === "accesorio" ? "accesorios" : "");
+
   function exportCsv() {
     downloadCSV(`stock-${new Date().toISOString().slice(0, 10)}.csv`, [
       ["Tienda", "Tipo", "Marca", "Modelo", "RAM", "Almacenamiento", "Color", "Estado caja", "Cód. interno", "IMEI 1", "IMEI 2", "Cód. identificación", "Cantidad", "Precio sugerido", "Fecha ingreso", "Situación"],
@@ -91,7 +123,24 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         <div className="flex gap-2">
           {role === "admin" && <Link href="/stock/editar" className="btn-primary !bg-amber-500 hover:!bg-amber-600"><Pencil className="h-4 w-4" /> Editar</Link>}
           {role === "admin" && <button onClick={() => setImporting(true)} className="btn-ghost"><Upload className="h-4 w-4" /> Importar hoja</button>}
-          <button onClick={exportCsv} className="btn-ghost"><Download className="h-4 w-4" /> Descargar Excel/CSV</button>
+          <div className="relative">
+            <button onClick={() => setDl(!dl)} disabled={!!making} className="btn-ghost">
+              {making ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />} {making ? "Preparando…" : "Descargar reporte"}
+            </button>
+            {dl && (
+              <div className="anim-pop absolute right-0 z-30 mt-2 w-64 overflow-hidden rounded-2xl border border-slate-200 bg-white p-1.5 shadow-xl">
+                {[["pdf", "PDF con resumen", "Listo para ver o imprimir", FileText], ["xlsx", "Excel con colores", "Resumen + hoja de stock con filtros", FileSpreadsheet], ["csv", "CSV simple", "Solo datos, sin formato", Download]].map(([k, t, d, Icon]) => {
+                  const I = Icon as typeof Download;
+                  return (
+                    <button key={k as string} onClick={() => report(k as "pdf" | "xlsx" | "csv")} className="flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left hover:bg-blue-50">
+                      <I className="h-5 w-5 shrink-0 text-blue-700" />
+                      <span><span className="block text-sm font-bold text-slate-800">{t as string}</span><span className="block text-xs text-slate-500">{d as string}</span></span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
           {role === "admin" && <Link href="/stock/nuevo" className="btn-primary"><Plus className="h-4 w-4" /> Ingresar</Link>}
         </div>
       </div>
