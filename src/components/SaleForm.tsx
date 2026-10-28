@@ -107,9 +107,9 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   useEffect(() => { if (mode === "celular") codeRef.current?.focus(); }, [mode]);
   const store = cat?.stores.find((s) => s.id === (p?.store_id ?? mStore));
 
-  async function transfer() {
-    if (!p || !user.store_id) return;
-    await api("/api/transfer", { body: { product_id: p.id, to_store: user.store_id } });
+  async function transfer(to = user.store_id) {
+    if (!p || !to) return;
+    await api("/api/transfer", { body: { product_id: p.id, to_store: to } });
     await search(p.code ?? code);
   }
 
@@ -144,7 +144,8 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
     }
   }
 
-  const otherStore = p && user.role === "seller" && p.store_id !== user.store_id;
+  const inAlmacen = !!p && p.store_id === 0;
+  const otherStore = p && (inAlmacen || (user.role === "seller" && p.store_id !== user.store_id));
   const bc = manual ? "#475569" : brandColor(p?.brand);
   const inputCls = (k: string) => `input ${changes.includes(k) ? "!border-amber-400 !bg-amber-50" : ""}`;
 
@@ -247,8 +248,11 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
             </div>
             {otherStore && (
               <div className="flex flex-wrap items-center gap-3 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
-                <AlertTriangle className="h-4 w-4" /> Este equipo está en <b>{p?.store_name}</b>, no en tu tienda.
-                <button onClick={transfer} className="btn-primary ml-auto !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Traer a mi tienda</button>
+                <AlertTriangle className="h-4 w-4" />
+                {inAlmacen ? <span>Este equipo pertenece a <b>Almacén</b>. Transfiérelo para poder venderlo.</span> : <span>Este equipo está en <b>{p?.store_name}</b>, no en tu tienda.</span>}
+                {user.store_id
+                  ? <button onClick={() => transfer()} className="btn-primary ml-auto !py-1.5"><ArrowLeftRight className="h-4 w-4" /> {inAlmacen ? "Transferir a mi tienda" : "Traer a mi tienda"}</button>
+                  : <span className="ml-auto flex flex-wrap gap-2">{cat?.stores.map((s) => <button key={s.id} onClick={() => transfer(s.id)} className="btn-primary !py-1.5"><ArrowLeftRight className="h-4 w-4" /> Transferir a {s.name}</button>)}</span>}
               </div>
             )}
             <div className="p-4">
