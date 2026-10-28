@@ -1,7 +1,7 @@
 "use client";
 import { Fragment, useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, Check, Clock, Download, FileText, Loader2, Search, X } from "lucide-react";
+import { AlertTriangle, Check, Clock, Download, FileText, Loader2, Search, SlidersHorizontal, X } from "lucide-react";
 import { api, downloadCSV } from "@/lib/client";
 import { addDays, fmtDay, fmtTime, limaToday, METHODS, soles } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -32,6 +32,8 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
   const [msg, setMsg] = useState("");
   const [making, setMaking] = useState(false);
   const [menu, setMenu] = useState(false);
+  const [fOpen, setFOpen] = useState(false);
+  const activeFilters = [store, seller, method, status, preset !== "hoy" ? preset : ""].filter(Boolean).length;
   const [scope, setScope] = useState(""); // "" = todas las tiendas juntas · "each" = un PDF por tienda · id = una tienda
   async function pdf() {
     setMenu(false);
@@ -114,11 +116,16 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
         </div>
       </div>
 
-      <div className="card space-y-3 p-3">
+      {/* Móvil: solo búsqueda + botón Filtros */}
+      <div className="flex items-center gap-2 sm:hidden">
+        <div className="relative min-w-0 flex-1"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" /><input className="input pl-9" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+        <button onClick={() => setFOpen(!fOpen)} className={`chip shrink-0 !py-2.5 ${fOpen || activeFilters ? "chip-on" : ""}`}><SlidersHorizontal className="h-4 w-4" /> Filtros{activeFilters > 0 && <span className="ml-1 grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[11px] font-extrabold text-blue-800">{activeFilters}</span>}</button>
+      </div>
+      <div className={`${fOpen ? "block" : "hidden"} card space-y-3 p-3 sm:block`}>
         <div className="flex flex-wrap items-center gap-2">
           {(["hoy", "ayer", "semana", "mes", "rango"] as Preset[]).map((p) => <button key={p} onClick={() => pick(p)} className={`chip !py-1.5 capitalize ${preset === p ? "chip-on" : ""}`}>{p === "semana" ? "Esta semana" : p === "mes" ? "Este mes" : p}</button>)}
           {preset === "rango" && <><input type="date" className="input !w-auto !py-1.5" value={from} onChange={(e) => setRange([e.target.value, to])} /><input type="date" className="input !w-auto !py-1.5" value={to} onChange={(e) => setRange([from, e.target.value])} /></>}
-          <div className="relative ml-auto min-w-44 flex-1 sm:max-w-xs"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" /><input className="input !py-1.5 pl-9" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
+          <div className="relative ml-auto hidden min-w-44 flex-1 sm:block sm:max-w-xs"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-300" /><input className="input !py-1.5 pl-9" placeholder="Buscar…" value={q} onChange={(e) => setQ(e.target.value)} /></div>
         </div>
         {role !== "seller" && (
           <div className="flex flex-wrap gap-2">

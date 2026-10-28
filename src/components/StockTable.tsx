@@ -1,7 +1,7 @@
 "use client";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, QrCode, Search, Trash2, Upload, X } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, Loader2, Pencil, Plus, QrCode, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { api, downloadCSV } from "@/lib/client";
 import { fmtDay, soles, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
@@ -33,6 +33,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [letters, setLetters] = useState(false);
   const [dl, setDl] = useState(false);
   const [scope, setScope] = useState<string>("");
+  const [fOpen, setFOpen] = useState(false);
   const [selling, setSelling] = useState(false);
   const [quick, setQuick] = useState(false);
   const [sellerNames, setSellerNames] = useState<string[]>([]);
@@ -44,6 +45,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [adv, setAdv] = useState(false);
   const [f, setF] = useState({ color: "", ram: "", storage: "", condition: "", from: "", to: "", pmin: "", pmax: "", noprice: "" });
   const activeAdv = Object.values(f).filter(Boolean).length;
+  const activeFilters = activeAdv + [store, brand, kind, codeQ.trim(), letters ? "1" : "", status !== "stock" ? status : ""].filter(Boolean).length;
   const [edit, setEdit] = useState<P | null>(null);
   const [importing, setImporting] = useState(false);
   const [sel, setSel] = useState<Set<number>>(new Set());
@@ -162,7 +164,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <h1 className="bg-gradient-to-r from-blue-900 to-sky-600 bg-clip-text text-2xl font-extrabold tracking-tight text-transparent">Stock</h1>
           <p className="text-sm text-slate-500"><b className="text-slate-800">{totals.units}</b> unidades · valorizado a precio sugerido <b className="text-slate-800">{soles(totals.value)}</b></p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {role === "admin" && <Link href="/stock/editar" className="btn-primary !bg-amber-500 hover:!bg-amber-600"><Pencil className="h-4 w-4" /> Editar</Link>}
           {role === "admin" && <button onClick={() => setQuick(true)} className="btn-ghost !border-emerald-300 !text-emerald-700"><Plus className="h-4 w-4" /> Subir vendidos</button>}
           {role === "admin" && <button onClick={() => setImporting(true)} className="btn-ghost"><Upload className="h-4 w-4" /> Importar hoja</button>}
@@ -198,20 +200,32 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
         </div>
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto rounded-2xl bg-slate-200/70 p-1.5">
+      {/* Móvil: solo búsqueda + botón Filtros; el resto de filtros se despliega al tocarlo */}
+      <div className="flex items-center gap-2 sm:hidden">
+        <div className="relative min-w-0 flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input className="input pl-9" placeholder="Buscar modelo, código, IMEI…" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        <button onClick={() => setFOpen(!fOpen)} className={`chip relative shrink-0 !py-2.5 ${fOpen || activeFilters ? "chip-on" : ""}`}>
+          <SlidersHorizontal className="h-4 w-4" /> Filtros
+          {activeFilters > 0 && <span className="ml-1 grid h-5 min-w-5 place-items-center rounded-full bg-white px-1 text-[11px] font-extrabold text-blue-800">{activeFilters}</span>}
+        </button>
+      </div>
+
+      <div className={`${fOpen ? "flex" : "hidden"} gap-1.5 overflow-x-auto rounded-2xl bg-slate-200/70 p-1.5 sm:flex`}>
         {[{ id: "", name: "Todo el stock", color: "#1e3a8a" }, { id: "0", name: "Almacén general", color: "#475569" }, ...(cat?.stores.map((x) => ({ id: String(x.id), name: x.name, color: x.color })) ?? [])].map((t) => (
           <button key={t.id} onClick={() => setStore(t.id)} className={`whitespace-nowrap rounded-xl px-4 py-2 text-sm font-bold transition ${store === t.id ? "bg-white shadow" : "text-slate-500 hover:text-slate-800"}`} style={store === t.id ? { color: t.color } : undefined}>{t.name}</button>
         ))}
       </div>
 
-      <div className="flex gap-1.5 overflow-x-auto">
+      <div className={`${fOpen ? "flex" : "hidden"} gap-1.5 overflow-x-auto sm:flex`}>
         {[["stock", "En stock"], ["sold", "Vendidos"], ["incautado", "Incautados"], ["rapido", "Subidos aparte"], ["all", "Todos"]].map(([id, name]) => (
           <button key={id} onClick={() => setStatus(id)} className={`chip whitespace-nowrap ${status === id ? "chip-on" : ""}`}>{name}</button>
         ))}
       </div>
 
-      <div className="card flex flex-wrap items-center gap-2 p-3">
-        <div className="relative min-w-52 flex-1">
+      <div className={`${fOpen ? "flex" : "hidden"} card flex-wrap items-center gap-2 p-3 sm:flex`}>
+        <div className="relative hidden min-w-52 flex-1 sm:block">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input className="input pl-9" placeholder="Buscar modelo, código, IMEI, color…" value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
