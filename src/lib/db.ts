@@ -112,6 +112,7 @@ async function migrate(c: Client) {
   }
   try { await c.execute("ALTER TABLE products ADD COLUMN flag TEXT"); } catch {}
   try { await c.execute("ALTER TABLE products ADD COLUMN src TEXT"); } catch {}
+  try { await c.execute("ALTER TABLE products ADD COLUMN seller TEXT"); } catch {}
   await loadSolucionesStock(c);
   await loadExtraStock(c);
   await flagRepeatedImei(c);
@@ -121,6 +122,21 @@ async function migrate(c: Client) {
   await createAndres(c);
   await purgeTestSales(c, "2026-10-28");
   await loadManualSold(c);
+  await backfillSeller(c);
+}
+
+// Una sola vez: la vendedora de los equipos ya vendidos sale de su venta o de la nota "Vendedora: X".
+async function backfillSeller(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='seller_col_v1'")).rows.length) return;
+  await c.execute("UPDATE products SET seller=(SELECT seller_name FROM sales WHERE product_id=products.id AND status='ok' ORDER BY id DESC LIMIT 1) WHERE seller IS NULL AND status='sold'");
+  const rows = (await c.execute("SELECT id,notes FROM products WHERE seller IS NULL AND notes LIKE '%Vendedora:%'")).rows;
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const r of rows) {
+    const m = String(r.notes).match(/Vendedora:\s*([^|·]+)/);
+    if (m) stmts.push({ sql: "UPDATE products SET seller=? WHERE id=?", args: [m[1].trim(), Number(r.id)] });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('seller_col_v1','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: vendido el domingo 25/10/2026 que no estaba en el stock (pestaña "Subidos aparte").

@@ -13,7 +13,7 @@ import QuickSoldModal from "./QuickSoldModal";
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
   ident: string | null; code: string | null; ram: number | null; storage: number | null; color: string | null; condition: string | null; qty: number;
-  price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null;
+  price_suggested: number | null; entry_date: string; status: string; is_test?: number; flag?: string | null; seller?: string | null;
 };
 
 const statusLabel = (s: string) => (s === "stock" ? "En stock" : s === "incautado" ? "Incautado" : "Vendido");
@@ -33,6 +33,10 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
   const [dl, setDl] = useState(false);
   const [selling, setSelling] = useState(false);
   const [quick, setQuick] = useState(false);
+  const [sellerNames, setSellerNames] = useState<string[]>([]);
+  useEffect(() => {
+    if (role === "admin") api<{ users: { name: string; role: string; active: number }[] }>("/api/users").then((r) => setSellerNames([...new Set(r.users.filter((u) => u.active && u.role !== "gerencia").map((u) => u.name))])).catch(() => {});
+  }, [role]);
   const [making, setMaking] = useState("");
   const [group, setGroup] = useState(false);
   const [adv, setAdv] = useState(false);
@@ -230,7 +234,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
           <table className="w-full border-separate border-spacing-0">
             <thead>
               <tr>
-                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación"] : []), ""].map((h, i) => (
+                {[...(role === "admin" ? [""] : []), "Cód.", "Tienda", "Marca", "Modelo", "RAM", "Alm.", "Color", "Caja", "IMEI 1", "IMEI 2 / Ident.", "P. sugerido", "Ingreso", ...(status !== "stock" ? ["Situación", "Vendedora"] : []), ""].map((h, i) => (
                   <th key={i} className="th">
                     {h}
                     {h === "Cód." && (
@@ -266,6 +270,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td font-semibold">{soles(r.price_suggested)}</td>
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>
                         {status !== "stock" && <td className="td">{statusLabel(r.status)}</td>}
+                        {status !== "stock" && <td className="td">{r.status === "sold" ? (role === "admin" ? <SellerCell id={r.id} seller={r.seller ?? null} names={sellerNames} onSaved={load} /> : (r.seller ?? "—")) : "—"}</td>}
                         <td className="td">{role === "admin" && r.kind === "accesorio" && <Link href={"/etiquetas?id=" + r.id} title="Etiqueta QR / código de barras" className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><QrCode className="h-4 w-4" /></Link>}{role === "admin" && <button onClick={() => setEdit(r)} className="rounded-lg p-1.5 text-slate-500 hover:bg-white"><Pencil className="h-4 w-4" /></button>}</td>
                       </tr>
                     );
@@ -319,6 +324,37 @@ function CodeCell({ id, code, warn, onSaved }: { id: number; code: string | null
         onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
         className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 font-mono text-sm outline-none" />
       {err && <div className="mt-0.5 whitespace-normal text-[10px] font-semibold leading-tight text-rose-600">{err}</div>}
+    </div>
+  );
+}
+
+/** Vendedora editable en la misma fila (equipos vendidos): clic, elegir o escribir un nombre, Enter. */
+function SellerCell({ id, seller, names, onSaved }: { id: number; seller: string | null; names: string[]; onSaved: () => void }) {
+  const [editing, setEditing] = useState(false);
+  const [v, setV] = useState(seller ?? "");
+  const [err, setErr] = useState("");
+  const [busy, setBusy] = useState(false);
+  async function save() {
+    const nv = v.trim();
+    if (nv === (seller ?? "")) { setEditing(false); setErr(""); return; }
+    setBusy(true);
+    try {
+      await api(`/api/products/${id}`, { method: "PATCH", body: { seller: nv } });
+      setEditing(false); setErr(""); onSaved();
+    } catch (e) { setErr((e as Error).message); } finally { setBusy(false); }
+  }
+  if (!editing)
+    return (
+      <button onClick={() => { setV(seller ?? ""); setEditing(true); }} title="Clic para cambiar la vendedora"
+        className={`rounded-md px-1.5 py-0.5 text-left text-sm hover:bg-white hover:ring-1 hover:ring-blue-300 ${seller ? "font-semibold" : "italic text-slate-400"}`}>{seller ?? "+ poner"}</button>
+    );
+  return (
+    <div className="w-36">
+      <input autoFocus list="stock-sellers" disabled={busy} value={v} onChange={(e) => setV(e.target.value)} onBlur={save}
+        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setEditing(false); setErr(""); } }}
+        className="w-full rounded-md border border-blue-500 bg-white px-1.5 py-1 text-sm outline-none" />
+      <datalist id="stock-sellers">{names.map((n) => <option key={n} value={n} />)}</datalist>
+      {err && <div className="mt-0.5 text-[10px] font-semibold text-rose-600">{err}</div>}
     </div>
   );
 }

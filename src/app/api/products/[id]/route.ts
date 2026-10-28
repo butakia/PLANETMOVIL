@@ -35,6 +35,12 @@ export async function PATCH(req: NextRequest, { params }: Ctx) {
     if ("imei1" in b && imei1 && imei1 !== cur.imei1) set("flag", null); // IMEI corregido: se quita la marca roja
     if ("imei2" in b) set("imei2", imei2);
     if ("ident" in b) set("ident", clean(b.ident));
+    if ("seller" in b) {
+      const seller = clean(b.seller);
+      set("seller", seller);
+      // La venta ligada (si existe) cambia de vendedora también, para que Ventas y reportes coincidan.
+      await run("UPDATE sales SET seller_name=COALESCE(?,seller_name), seller_id=COALESCE((SELECT id FROM users WHERE name=? COLLATE NOCASE LIMIT 1),seller_id) WHERE product_id=?", [seller, seller, id]);
+    }
     // Solo se valida lo que realmente cambió, para poder editar otros campos de un equipo con IMEI o código repetido.
     const c = await findConflicts({
       code: code !== cur.code ? code : null,
