@@ -60,7 +60,7 @@ async function init() {
   const stmts: { sql: string; args: InValue[] }[] = [
     { sql: "INSERT INTO stores (id,name,short,series,color,address) VALUES (1,'Planet Movil','Tienda 1','PM01','#1d4ed8','Piura')", args: [] },
     { sql: "INSERT INTO stores (id,name,short,series,color,address) VALUES (2,'Soluciones Móviles','Tienda 2','SM01','#0d9488','Piura')", args: [] },
-    { sql: "INSERT INTO users (username,name,role,password) VALUES ('admin','Administrador','admin',?)", args: [hashPassword(process.env.ADMIN_PASSWORD ?? "admin123")] },
+    { sql: "INSERT INTO users (username,name,role,password) VALUES ('Omar','Omar','admin',?)", args: [hashPassword(process.env.ADMIN_PASSWORD ?? "admin")] },
     { sql: "INSERT INTO users (username,name,role) VALUES ('Jaime','Jaime','gerencia')", args: [] },
     { sql: "INSERT INTO users (username,name,role) VALUES ('Rosa','Rosa','admin')", args: [] },
     { sql: "INSERT INTO users (username,name,role,store_id) VALUES ('Milagros','Milagros','seller',0)", args: [] },
@@ -95,6 +95,18 @@ async function migrate(c: Client) {
   await c.execute("UPDATE stores SET ruc='10067717002', owner='OLIDEN VERA JAIME CONCEPCION' WHERE ruc IS NULL OR ruc=''");
   await c.execute("UPDATE users SET username='Jaime', name='Jaime', password=NULL WHERE username='jefe'");
   await c.execute("INSERT OR IGNORE INTO users (username,name,role) VALUES ('Rosa','Rosa','admin')");
+  // El administrador pasa a llamarse Omar (usuario Omar, contraseña inicial "admin"); se aplica una sola vez
+  const om = await c.execute("SELECT 1 FROM settings WHERE key='admin_is_omar'");
+  if (!om.rows.length) {
+    const taken = await c.execute("SELECT 1 FROM users WHERE username='Omar'");
+    if (!taken.rows.length) {
+      await c.execute({
+        sql: "UPDATE users SET username='Omar', name='Omar', password=? WHERE username='admin'",
+        args: [hashPassword("admin")],
+      });
+    }
+    await c.execute("INSERT INTO settings (key,value) VALUES ('admin_is_omar','1')");
+  }
 }
 
 export async function db(): Promise<Client> {

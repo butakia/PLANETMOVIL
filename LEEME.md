@@ -9,12 +9,12 @@ Abrir http://localhost:3100. La base de datos se crea sola en `data/planet.db` c
 
 | Perfil | Usuario | Contraseña |
 |---|---|---|
-| Administrador | `admin` | `admin123` |
+| Administrador | `Omar` | `admin` |
 | Administradora | `Rosa` | — (solo usuario) |
 | Gerencia (consulta e informes) | `Jaime` | — (solo usuario) |
 | Vendedora (Planet Movil) | `Milagros` | — (solo usuario) |
 
-Cambia la contraseña de `admin` desde la sección Usuarios antes de usarlo en serio.
+Cambia la contraseña de `Omar` desde la sección Usuarios antes de usarlo en serio.
 
 ## Subir a Vercel
 Vercel no guarda archivos, así que la base debe ser remota (Turso, plan gratis):
