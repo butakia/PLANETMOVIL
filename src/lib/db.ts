@@ -2,6 +2,7 @@ import { createClient, type Client, type InValue } from "@libsql/client";
 import { randomBytes, scryptSync } from "node:crypto";
 import { BRAND_COLORS, CATALOG, COLORS } from "./catalog";
 import { STOCK_SOLUCIONES } from "./seed-stock";
+import { STOCK_EXTRA } from "./seed-stock2";
 
 const g = globalThis as unknown as { __pm_client?: Client; __pm_ready?: Promise<void> };
 
@@ -109,6 +110,53 @@ async function migrate(c: Client) {
     await c.execute("INSERT INTO settings (key,value) VALUES ('admin_is_omar','1')");
   }
   await loadSolucionesStock(c);
+  await loadExtraStock(c);
+}
+
+// RAM y almacenamiento a partir del nombre ("4+128GB", "256+8GB", "(256GB/4RAM)", "128gb"…)
+function specsFromModel(model: string): { ram: number | null; storage: number | null } {
+  let m = model.match(/(\d{1,2})\s*(?:\+|\/)\s*(\d{2,4})/);
+  if (m && +m[1] <= 16 && +m[2] >= 32) return { ram: +m[1], storage: +m[2] };
+  m = model.match(/(\d{3,4})\s*(?:\+|\/)\s*(\d{1,2})\s*(?:gb)?\b/i);
+  if (m && +m[1] >= 64 && +m[2] <= 16) return { ram: +m[2], storage: +m[1] };
+  const ram = model.match(/(\d{1,2})\s*ram/i);
+  const st = model.match(/(\d{2,4})\s*gb/i);
+  return { ram: ram ? +ram[1] : null, storage: st && +st[1] >= 16 ? +st[1] : null };
+}
+
+// Una sola vez: Almacén general, Planet Movil y el resto de Soluciones Móviles / Red i Mobile.
+// Se omite lo que ya exista con el mismo código en esa tienda. Un IMEI repetido 3 o más veces
+// (error de copiado en la hoja) se deja vacío para no mezclar equipos distintos.
+async function loadExtraStock(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='stock_extra_v1'")).rows.length) return;
+  const seen = new Set<string>();
+  const rows: { store: number; code: string; model: string; imei: string | null }[] = [];
+  for (const line of STOCK_EXTRA.trim().split("\n")) {
+    const [store, code, model, imei] = line.split("|");
+    const key = `${store}|${code}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({ store: Number(store), code, model, imei: imei || null });
+  }
+  const count = new Map<string, number>();
+  for (const r of rows) if (r.imei) count.set(r.imei, (count.get(r.imei) ?? 0) + 1);
+  const day = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const r of rows) {
+    const dup = await c.execute({ sql: "SELECT 1 FROM products WHERE status='stock' AND store_id=? AND code=?", args: [r.store, r.code] });
+    if (dup.rows.length) continue;
+    const imei = r.imei && (count.get(r.imei) ?? 0) < 3 ? r.imei : null;
+    const { ram, storage } = specsFromModel(r.model);
+    const brand = r.model.split(" ")[0];
+    stmts.push({ sql: "INSERT OR IGNORE INTO brands (name,color) VALUES (?,?)", args: [brand, "#64748b"] });
+    stmts.push({ sql: "INSERT OR IGNORE INTO models (name,brand,def_ram,def_storage) VALUES (?,?,?,?)", args: [r.model, brand, ram ?? 4, storage ?? 64] });
+    stmts.push({
+      sql: "INSERT INTO products (kind,store_id,brand,model,imei1,code,ram,storage,condition,qty,entry_date,created_by) VALUES ('celular',?,?,?,?,?,?,?,'Sellado',1,?,'Omar')",
+      args: [r.store, brand, r.model, imei, r.code, ram, storage, day],
+    });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('stock_extra_v1','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: borra los equipos de prueba (y sus ventas) y carga el stock real de Soluciones Móviles.
