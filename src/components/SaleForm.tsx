@@ -22,13 +22,18 @@ type Pay = { method: string; amount: string };
 const EDIT_KEYS = ["model", "ram", "storage", "color", "condition", "imei1", "imei2"] as const;
 const boxLabel = (c?: string | null) => (!c ? "—" : c.toLowerCase().startsWith("sell") ? "Caja sellada" : c.toLowerCase().startsWith("abi") ? "Caja abierta" : c);
 
-export default function SaleForm({ user, late = false }: { user: { role: string; store_id: number | null; name: string }; late?: boolean }) {
+export default function SaleForm({ user, late = false }: { user: { role: string; store_id: number | null; name: string; rotating?: boolean }; late?: boolean }) {
   const router = useRouter();
   const { cat, brandColor } = useCatalog();
   const [mode, setMode] = useState<null | "celular" | "accesorio" | "servicio">(null);
   const [acc, setAcc] = useState<Accessory | null>(null);
   const [svc, setSvc] = useState<Service>({ technician: "", detail: "", date: limaToday() });
   const [tTo, setTTo] = useState<number>(user.store_id ?? 1);
+  // Quien rota (y la administración) siempre dice en qué tienda está antes de seguir; la vendedora fija (Andres) no.
+  const asksStore = !!user.rotating || user.role === "admin";
+  const [storeChosen, setStoreChosen] = useState(!asksStore);
+  const [curStore, setCurStore] = useState<number | null>(user.store_id);
+  const [picking, setPicking] = useState<number | null>(null);
   const [moving, setMoving] = useState(false);
   const [movedMsg, setMovedMsg] = useState("");
   const [success, setSuccess] = useState(false);
@@ -101,14 +106,24 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   const remaining = Math.round((total - paid) * 100) / 100;
   const isSvc = mode === "servicio";
   const svcReady = isSvc && !!svc.technician.trim() && !!svc.detail.trim();
-  const hasItem = !!p || manual || !!acc || isSvc;
+  const hasItem = (!!p || manual || !!acc || isSvc) && storeChosen;
   const isAcc = !!acc || p?.kind === "accesorio";
   const itemName = isSvc ? `Servicio técnico: ${svc.detail.trim()}` : acc ?[accessoryName(acc), acc.detail.trim()].filter(Boolean).join(" ") : fields.model;
 
   function chooseMode(m: "celular" | "accesorio" | "servicio") {
     setMode(m); setErr("");
   }
+  async function pickStore(id: number) {
+    setPicking(id); setErr("");
+    try {
+      if (user.rotating) await api("/api/store", { body: { store_id: id } });
+      if (user.rotating) setCurStore(id);
+      setMStore(id); setTTo(id); setStoreChosen(true);
+      if (user.rotating) router.refresh();
+    } catch (e) { setErr((e as Error).message); } finally { setPicking(null); }
+  }
   function backToChoice() {
+    if (asksStore) setStoreChosen(false);
     setMode(null); setAcc(null); setP(null); setManual(false); setMatches([]); setSearched(false); setCode("");
     setPrice(""); setQty(1); setErr(""); setEditing(false); resetPay();
   }
@@ -124,9 +139,9 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   // Tiendas a las que se puede traspasar (todas menos donde ya está) y destino realmente elegido.
   const destinations = (cat?.stores ?? []).filter((s) => s.id !== p?.store_id);
   const destTo = destinations.some((s) => s.id === tTo) ? tTo : (destinations[0]?.id ?? tTo);
-  useEffect(() => { if (user.store_id) setTTo(user.store_id); }, [user.store_id]);
+  useEffect(() => { if (user.store_id) { setTTo(user.store_id); setCurStore(user.store_id); } }, [user.store_id]);
 
-  async function transfer(to: number | null = user.store_id) {
+  async function transfer(to: number | null = curStore) {
     if (!p || !to || moving) return;
     setMoving(true); setErr(""); setMovedMsg("");
     try {
@@ -180,7 +195,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
   }
 
   const inAlmacen = !!p && p.store_id === 0;
-  const otherStore = p && (inAlmacen || (!!user.store_id && p.store_id !== user.store_id));
+  const otherStore = p && (inAlmacen || (!!curStore && p.store_id !== curStore));
   const bc = manual ? "#475569" : brandColor(p?.brand);
   const inputCls = (k: string) => `input ${changes.includes(k) ? "!border-amber-400 !bg-amber-50" : ""}`;
 
@@ -221,11 +236,32 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       )}
 
       {mode !== null && !hasItem && (
-        <button type="button" onClick={backToChoice} className="btn-ghost !py-1.5 text-xs"><ArrowLeft className="h-3.5 w-3.5" /> Cambiar (celulares / accesorios)</button>
+        <button type="button" onClick={backToChoice} className="btn-ghost !py-1.5 text-xs"><ArrowLeft className="h-3.5 w-3.5" /> Cambiar (celulares / accesorios / servicio)</button>
+      )}
+
+      {/* Paso obligatorio: ¿en qué tienda está la vendedora? */}
+      {mode !== null && !storeChosen && (
+        <div className="card anim-pop space-y-4 p-4 sm:p-5">
+          <div>
+            <div className="text-xs font-bold uppercase text-slate-400">Antes de seguir</div>
+            <h2 className="text-xl font-extrabold text-slate-800">¿En qué tienda estás vendiendo?</h2>
+            <p className="text-sm text-slate-500">Toca la tienda donde estás ahora mismo. La venta saldrá a nombre de esa tienda.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(cat?.stores ?? []).map((s) => (
+              <button key={s.id} type="button" disabled={picking !== null} onClick={() => pickStore(s.id)}
+                className="lift flex min-h-20 items-center justify-center gap-3 rounded-2xl px-4 py-5 text-lg font-extrabold text-white shadow-md active:scale-[0.98] disabled:opacity-60"
+                style={{ background: s.color }}>
+                {picking === s.id ? <Loader2 className="h-5 w-5 animate-spin" /> : <ChevronRight className="h-5 w-5 opacity-70" />} {s.name}
+              </button>
+            ))}
+          </div>
+          {!cat && <p className="text-center text-sm text-slate-400">Cargando tiendas…</p>}
+        </div>
       )}
 
       {/* 1b. Accesorio */}
-      {mode === "accesorio" && (
+      {mode === "accesorio" && storeChosen && (
         <div className="card p-4 sm:p-5">
           <label className="label !mb-3">1 · Datos del accesorio</label>
           <SimpleAccessory onChange={setAcc} />
@@ -238,7 +274,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       )}
 
       {/* 1c. Servicio técnico */}
-      {mode === "servicio" && (
+      {mode === "servicio" && storeChosen && (
         <div className="card p-4 sm:p-5">
           <label className="label !mb-3">1 · Servicio técnico (técnico y detalle)</label>
           <ServiceFields onChange={setSvc} />
@@ -251,7 +287,7 @@ export default function SaleForm({ user, late = false }: { user: { role: string;
       )}
 
       {/* 1. Equipo */}
-      {mode === "celular" && (
+      {mode === "celular" && storeChosen && (
       <div className="card p-4 sm:p-5">
         <label className="label">1 · Celular (código interno o IMEI)</label>
         <div className="flex gap-2">

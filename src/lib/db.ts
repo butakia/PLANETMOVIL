@@ -129,6 +129,18 @@ async function migrate(c: Client) {
   await moveCode1528(c);
   await trainingPhones(c);
   await anonymizeAdminSales(c);
+  await deleteUnwantedItems(c);
+}
+
+// Una sola vez: borra los equipos que el administrador pidió quitar (prueba de capacitación y dos accesorios de prueba).
+async function deleteUnwantedItems(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='delete_items_v1'")).rows.length) return;
+  const where = "(model LIKE 'Redmi A5 (PRUEBA)%' OR model LIKE 'Funda A56%' OR (model LIKE 'Aud%' AND model LIKE '%Saso%'))";
+  await c.batch([
+    { sql: `DELETE FROM movements WHERE product_id IN (SELECT id FROM products WHERE ${where})`, args: [] },
+    { sql: `DELETE FROM products WHERE ${where}`, args: [] },
+    { sql: "INSERT INTO settings (key,value) VALUES ('delete_items_v1','1')", args: [] },
+  ], "write");
 }
 
 // Una sola vez: las ventas hechas con usuarios de administración (Omar, Rosa…) pasan a "Vendedora 1/2/3" al azar.
