@@ -161,7 +161,7 @@ export default function SalesList({ role }: { role: "admin" | "seller" | "gerenc
                   {role === "admin" && s.status === "pending" && <>
                     <button onClick={() => decide(s, "approve")} className="ml-3 inline-flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-xs font-bold text-white"><Check className="h-3 w-3" /> Aprobar</button>
                     <button onClick={() => decide(s, "reject")} className="ml-1.5 inline-flex items-center gap-1 rounded-lg bg-rose-100 px-2.5 py-1 text-xs font-bold text-rose-700"><X className="h-3 w-3" /> Rechazar</button></>}
-                  {role === "admin" && s.status === "ok" && <button onClick={async () => { if (confirm(`¿Anular la venta ${s.number}? El equipo volverá al stock.`)) { await api(`/api/sales/${s.id}`, { method: "DELETE" }); load(); } }} className="ml-3 text-xs font-semibold text-rose-600">Anular</button>}
+                  {role === "admin" && <button onClick={async () => { if (confirm(`¿Anular y BORRAR la venta ${s.number} del registro?\n\nDesaparece por completo, sin dejar rastro.${s.status === "ok" ? " El equipo vuelve al stock." : ""}`)) { await api(`/api/sales/${s.id}`, { method: "DELETE" }); load(); } }} className="ml-3 text-xs font-semibold text-rose-600">Anular</button>}
                 </td>
               </tr>
               {open === s.id && s.modified && (

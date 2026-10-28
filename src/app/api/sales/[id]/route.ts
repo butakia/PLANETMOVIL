@@ -21,15 +21,16 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   const g = await guard(["admin"]);
   if (g.error) return g.error;
   const id = Number((await params).id);
-  const s = await one<{ id: number; number: string; product_id: number; qty: number; price: number; store_id: number; item: string }>("SELECT id,number,product_id,qty,price,store_id,item FROM sales WHERE id=?", [id]);
+  const s = await one<{ id: number; product_id: number | null; qty: number; status: string }>("SELECT id,product_id,qty,status FROM sales WHERE id=?", [id]);
   if (!s) return NextResponse.json({ error: "No encontrada" }, { status: 404 });
   const tx = await (await db()).transaction("write");
   try {
-    await tx.execute({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL, sale_price=NULL WHERE id=?", args: [s.qty, s.product_id] });
+    // Borrado total: no queda la venta, ni sus pagos, ni sus avisos, ni una nota de anulación.
+    // Solo las ventas válidas descontaron stock, así que solo esas lo devuelven.
+    if (s.status === "ok" && s.product_id) await tx.execute({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL, sale_price=NULL WHERE id=? AND status IN ('sold','stock')", args: [s.qty, s.product_id] });
     await tx.execute({ sql: "DELETE FROM payments WHERE sale_id=?", args: [id] });
+    await tx.execute({ sql: "DELETE FROM alerts WHERE sale_id=?", args: [id] });
     await tx.execute({ sql: "DELETE FROM sales WHERE id=?", args: [id] });
-    await tx.execute({ sql: "UPDATE alerts SET sale_id=NULL WHERE sale_id=?", args: [id] });
-    await tx.execute({ sql: "INSERT INTO alerts (type,message,store_id,flagged) VALUES ('anulacion',?,?,1)", args: [`${g.user.name} anuló la venta ${s.number} (${JSON.parse(s.item).model}, S/ ${Number(s.price).toFixed(2)}). El equipo volvió al stock.`, s.store_id] });
     await tx.commit();
   } catch (e) {
     await tx.rollback();

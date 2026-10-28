@@ -131,6 +131,29 @@ async function migrate(c: Client) {
   await anonymizeAdminSales(c);
   await deleteUnwantedItems(c);
   await purgeTrainingSales(c);
+  await purgeSalesExceptA35e(c);
+}
+
+// Una sola vez (capacitación): en Ventas se conservan solo las del ZTE Blade A35e; todo lo demás se borra del registro
+// sin dejar rastro, y los equipos de esas ventas vuelven al stock.
+async function purgeSalesExceptA35e(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='sales_only_a35e_v1'")).rows.length) return;
+  const rows = (await c.execute("SELECT id,product_id,qty,status,item FROM sales")).rows;
+  const keep = (item: string) => { try { return String(JSON.parse(item).model ?? "").toLowerCase().replace(/\s+/g, "").includes("a35e"); } catch { return false; } };
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  let removed = 0;
+  for (const s of rows) {
+    if (keep(String(s.item))) continue;
+    const id = Number(s.id);
+    removed++;
+    if (s.status === "ok" && s.product_id) stmts.push({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL, sale_price=NULL WHERE id=? AND status IN ('sold','stock')", args: [Number(s.qty), Number(s.product_id)] });
+    stmts.push({ sql: "DELETE FROM payments WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM alerts WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM sales WHERE id=?", args: [id] });
+  }
+  stmts.push({ sql: "DELETE FROM alerts WHERE type='anulacion'", args: [] });
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('sales_only_a35e_v1',?)", args: [String(removed)] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: borra las ventas hechas con los equipos de prueba de capacitación (PRUEBA) y los devuelve al stock.
