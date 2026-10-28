@@ -130,6 +130,24 @@ async function migrate(c: Client) {
   await trainingPhones(c);
   await anonymizeAdminSales(c);
   await deleteUnwantedItems(c);
+  await purgeTrainingSales(c);
+}
+
+// Una sola vez: borra las ventas hechas con los equipos de prueba de capacitación (PRUEBA) y los devuelve al stock.
+async function purgeTrainingSales(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='purge_training_sales_v1'")).rows.length) return;
+  const sales = (await c.execute("SELECT id,product_id,qty,status FROM sales WHERE product_id IN (SELECT id FROM products WHERE is_test=1)")).rows;
+  const stmts: { sql: string; args: InValue[] }[] = [];
+  for (const s of sales) {
+    const id = Number(s.id);
+    if (s.status === "ok") stmts.push({ sql: "UPDATE products SET qty=qty+?, status='stock', seller=NULL, sale_price=NULL WHERE id=? AND status IN ('sold','stock')", args: [Number(s.qty), Number(s.product_id)] });
+    stmts.push({ sql: "DELETE FROM payments WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM alerts WHERE sale_id=?", args: [id] });
+    stmts.push({ sql: "DELETE FROM sales WHERE id=?", args: [id] });
+  }
+  if (sales.length) stmts.push({ sql: "INSERT INTO alerts (type,message,flagged) VALUES ('anulacion',?,0)", args: [`Se borraron ${sales.length} venta(s) hechas con equipos de prueba de capacitación; los equipos volvieron al stock.`] });
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('purge_training_sales_v1',?)", args: [String(sales.length)] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: borra los equipos que el administrador pidió quitar (prueba de capacitación y dos accesorios de prueba).
