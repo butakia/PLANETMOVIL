@@ -3,6 +3,7 @@ import { randomBytes, scryptSync } from "node:crypto";
 import { BRAND_COLORS, CATALOG, COLORS } from "./catalog";
 import { STOCK_SOLUCIONES } from "./seed-stock";
 import { STOCK_EXTRA } from "./seed-stock2";
+import { STOCK_V3 } from "./seed-stock3";
 
 const g = globalThis as unknown as { __pm_client?: Client; __pm_ready?: Promise<void> };
 
@@ -114,6 +115,38 @@ async function migrate(c: Client) {
   await loadExtraStock(c);
   await flagRepeatedImei(c);
   await restoreRepeatedImei(c);
+  await replaceStockV3(c);
+}
+
+// Una sola vez: sustituye el stock por el de las hojas de julio 2026 (con vendidos) y crea Red i Mobile y Jaimes Tienda.
+// Los equipos que ya tienen una venta registrada se conservan para no romper el historial.
+async function replaceStockV3(c: Client) {
+  if ((await c.execute("SELECT 1 FROM settings WHERE key='stock_v3'")).rows.length) return;
+  const kept = new Set((await c.execute("SELECT imei1 FROM products WHERE id IN (SELECT product_id FROM sales WHERE product_id IS NOT NULL) AND imei1 IS NOT NULL")).rows.map((r) => String(r.imei1)));
+  const stmts: { sql: string; args: InValue[] }[] = [
+    { sql: "INSERT OR IGNORE INTO stores (id,name,short,series,color,address,ruc,owner) VALUES (3,'Red i Mobile','Tienda 3','RM01','#7c3aed','Piura','10067717002','OLIDEN VERA JAIME CONCEPCION')", args: [] },
+    { sql: "INSERT OR IGNORE INTO stores (id,name,short,series,color,address,ruc,owner) VALUES (4,'Jaimes Tienda','Tienda 4','JT01','#ea580c','Piura','10067717002','OLIDEN VERA JAIME CONCEPCION')", args: [] },
+    { sql: "DELETE FROM movements WHERE product_id IN (SELECT id FROM products WHERE id NOT IN (SELECT product_id FROM sales WHERE product_id IS NOT NULL))", args: [] },
+    { sql: "DELETE FROM products WHERE id NOT IN (SELECT product_id FROM sales WHERE product_id IS NOT NULL)", args: [] },
+  ];
+  const today = new Date(Date.now() - 5 * 3600e3).toISOString().slice(0, 10);
+  const imeiCount = new Map<string, number>();
+  const rows = STOCK_V3.trim().split("\n").map((l) => l.split("|"));
+  for (const r of rows) if (r[4] && r[1] === "0") imeiCount.set(r[4], (imeiCount.get(r[4]) ?? 0) + 1);
+  for (const [store, sold, code, model, imei, color, notes, date] of rows) {
+    if (imei && kept.has(imei)) continue;
+    const { ram, storage } = specsFromModel(model);
+    const brand = model.split(" ")[0];
+    const flag = sold === "0" && imei && (imeiCount.get(imei) ?? 0) > 1 ? "IMEI repetido" : null;
+    stmts.push({ sql: "INSERT OR IGNORE INTO brands (name,color) VALUES (?,?)", args: [brand, "#64748b"] });
+    stmts.push({ sql: "INSERT OR IGNORE INTO models (name,brand,def_ram,def_storage) VALUES (?,?,?,?)", args: [model, brand, ram ?? 4, storage ?? 64] });
+    stmts.push({
+      sql: "INSERT INTO products (kind,store_id,brand,model,imei1,code,ram,storage,color,condition,qty,status,notes,flag,entry_date,created_by) VALUES ('celular',?,?,?,?,?,?,?,?,'Sellado',?,?,?,?,?,'Omar')",
+      args: [Number(store), brand, model, imei || null, code || null, ram, storage, color || null, sold === "1" ? 0 : 1, sold === "1" ? "sold" : "stock", notes || null, flag, date || today],
+    });
+  }
+  stmts.push({ sql: "INSERT INTO settings (key,value) VALUES ('stock_v3','1')", args: [] });
+  await c.batch(stmts, "write");
 }
 
 // Una sola vez: marca en rojo (Stock) los equipos cuyo IMEI venía repetido en las hojas, para corregirlos a mano.
