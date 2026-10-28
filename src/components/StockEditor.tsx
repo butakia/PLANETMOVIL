@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowLeft, Check, Loader2, Save, Search, Undo2 } from "lucide-react";
 import { api } from "@/lib/client";
 import { useCatalog } from "./useCatalog";
+import DuplicateImei from "./DuplicateImei";
 
 type P = {
   id: number; kind: string; store_id: number; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -31,11 +32,11 @@ const COLS: { k: Field; label: string; w: string; num?: boolean }[] = [
 
 const orig = (p: P, k: Field) => String(p[k] ?? "");
 
-export default function StockEditor() {
+export default function StockEditor({ initialQ = "" }: { initialQ?: string }) {
   const { cat } = useCatalog();
   const [rows, setRows] = useState<P[]>([]);
   const [loading, setLoading] = useState(true);
-  const [q, setQ] = useState("");
+  const [q, setQ] = useState(initialQ);
   const [store, setStore] = useState("");
   const [edits, setEdits] = useState<Edits>({});
   const [errs, setErrs] = useState<Record<number, string>>({});
@@ -153,7 +154,7 @@ export default function StockEditor() {
                         ) : (
                           <input className={cls} inputMode={c.num ? "decimal" : undefined} value={val(p, c.k)} onChange={(e) => setVal(p, c.k, e.target.value)} />
                         )}
-                        {c.k === "imei1" && p.flag && !changed && <span className="mt-0.5 inline-block rounded bg-red-600 px-1.5 text-[10px] font-bold text-white">{p.flag}</span>}
+                        {c.k === "imei1" && p.flag && !changed && <div className="mt-0.5"><DuplicateImei imei={p.imei1} label={p.flag} currentId={p.id} /></div>}
                       </td>
                     );
                   })}

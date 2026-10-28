@@ -6,6 +6,7 @@ import { api, downloadCSV } from "@/lib/client";
 import { fmtDay, soles, storageLabel } from "@/lib/format";
 import { useCatalog } from "./useCatalog";
 import ImportModal from "./ImportModal";
+import DuplicateImei from "./DuplicateImei";
 
 type P = {
   id: number; kind: string; store_id: number; store_name: string; brand: string | null; model: string; imei1: string | null; imei2: string | null;
@@ -167,7 +168,7 @@ export default function StockTable({ role }: { role: "admin" | "seller" | "geren
                         <td className="td">{r.storage ? storageLabel(r.storage) : "—"}</td>
                         <td className="td">{r.color ? <span className="inline-flex items-center gap-1.5"><span className="h-3 w-3 rounded-full border border-slate-300" style={{ background: colorHex(r.color) }} />{r.color}</span> : "—"}</td>
                         <td className="td">{r.condition ?? "—"}</td>
-                        <td className="td font-mono text-xs">{r.imei1 ?? "—"}{r.flag ? <span className="ml-1.5 rounded bg-red-600 px-1.5 font-sans text-[10px] font-bold text-white">{r.flag}</span> : null}</td>
+                        <td className="td font-mono text-xs">{r.imei1 ?? "—"}{r.flag ? <DuplicateImei imei={r.imei1} label={r.flag} currentId={r.id} /> : null}</td>
                         <td className="td font-mono text-xs">{r.imei2 ?? r.ident ?? "—"}</td>
                         <td className="td font-semibold">{soles(r.price_suggested)}</td>
                         <td className="td text-slate-500">{fmtDay(r.entry_date)}</td>

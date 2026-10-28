@@ -29,6 +29,7 @@ export async function GET(req: NextRequest) {
   if (sp.get("pmax")) { where.push("p.price_suggested<=?"); args.push(Number(sp.get("pmax"))); }
   if (sp.get("noprice")) { where.push("p.price_suggested IS NULL"); }
   if (sp.get("code")) { where.push("p.code=?"); args.push(sp.get("code")!); }
+  if (sp.get("imei")) { where.push("(p.imei1=? OR p.imei2=?)"); args.push(sp.get("imei")!, sp.get("imei")!); }
   const rows = await listProducts(where, args);
   return NextResponse.json({ products: g.user.role === "seller" ? stripCost(rows) : rows });
 }
